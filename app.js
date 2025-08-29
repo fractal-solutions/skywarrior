@@ -854,15 +854,15 @@ class SkyWarriorGame {
     createMissilePickupModel() {
         const group = new THREE.Group();
 
-        // Missile body (simple cylinder)
+        // Missile body (simple cylinder) - now glowing
         const bodyGeometry = new THREE.CylinderGeometry(3, 3, 20, 8);
-        const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x0077ff }); // Blue
+        const bodyMaterial = new THREE.MeshBasicMaterial({ color: 0x0077ff, emissive: 0x0077ff, emissiveIntensity: 0.5 }); // Blue glow
         const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
         group.add(body);
 
-        // Fins
+        // Fins - now glowing
         const finGeometry = new THREE.BoxGeometry(1, 10, 10);
-        const finMaterial = new THREE.MeshLambertMaterial({ color: 0x0055cc });
+        const finMaterial = new THREE.MeshBasicMaterial({ color: 0x0055cc, emissive: 0x0055cc, emissiveIntensity: 0.5 });
         const fin1 = new THREE.Mesh(finGeometry, finMaterial);
         fin1.position.z = 0;
         fin1.position.y = -5;
@@ -882,15 +882,31 @@ class SkyWarriorGame {
         group.add(tip);
 
         group.rotation.x = Math.PI / 2; // Orient horizontally
+
+        // Holographic cube
+        const cubeGeometry = new THREE.BoxGeometry(30, 30, 30); // Size of the cube
+        const cubeMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff00, // Yellow
+            transparent: true,
+            opacity: 0.1, // Very subtle fill
+            wireframe: true,
+            emissive: 0xffff00, // Yellow glow
+            emissiveIntensity: 0.5
+        });
+        const holographicCube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        holographicCube.rotation.y = Math.PI / 4; // Rotate slightly for diamond look
+        holographicCube.rotation.x = Math.PI / 4;
+        group.add(holographicCube);
+
         return group;
     }
 
     createAmmoPickupModel() {
         const group = new THREE.Group();
 
-        // Ammo box (simple box)
+        // Ammo box (simple box) - now glowing
         const boxGeometry = new THREE.BoxGeometry(15, 10, 10);
-        const boxMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 }); // Grey
+        const boxMaterial = new THREE.MeshBasicMaterial({ color: 0x888888, emissive: 0x888888, emissiveIntensity: 0.3 }); // Grey glow
         const box = new THREE.Mesh(boxGeometry, boxMaterial);
         group.add(box);
 
@@ -900,6 +916,21 @@ class SkyWarriorGame {
         const cross2 = new THREE.Mesh(new THREE.BoxGeometry(3, 10, 3), crossMaterial);
         group.add(cross1);
         group.add(cross2);
+
+        // Holographic cube
+        const cubeGeometry = new THREE.BoxGeometry(30, 30, 30); // Size of the cube
+        const cubeMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffff00, // Yellow
+            transparent: true,
+            opacity: 0.1, // Very subtle fill
+            wireframe: true,
+            emissive: 0xffff00, // Yellow glow
+            emissiveIntensity: 0.5
+        });
+        const holographicCube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+        holographicCube.rotation.y = Math.PI / 4; // Rotate slightly for diamond look
+        holographicCube.rotation.x = Math.PI / 4;
+        group.add(holographicCube);
 
         return group;
     }
@@ -1620,6 +1651,23 @@ class SkyWarriorGame {
         }
     }
 
+    updatePickups(deltaTime) {
+        const floatSpeed = 0.5; // How fast they float up/down
+        const floatHeight = 5; // How high they float
+        const rotateSpeed = 0.5; // How fast they rotate
+
+        const animatePickup = (pickup, index) => {
+            // Floating effect (sine wave)
+            pickup.position.y += Math.sin(Date.now() * 0.002 + index) * floatSpeed * deltaTime;
+
+            // Rotation
+            pickup.rotation.y += rotateSpeed * deltaTime;
+        };
+
+        this.missilePickups.forEach(animatePickup);
+        this.ammoPickups.forEach(animatePickup);
+    }
+
     updateBullets(deltaTime) {
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const bullet = this.bullets[i];
@@ -2066,6 +2114,50 @@ class SkyWarriorGame {
                     }
                 }
             });
+
+            // Draw missile pickups
+            this.missilePickups.forEach(pickup => {
+                const relativePos = pickup.position.clone().sub(this.playerJet.position);
+                const distance = relativePos.length();
+                const maxRange = 1000; // Same radar range as enemies
+                
+                if (distance < maxRange) {
+                    const radarDistance = (distance / maxRange) * radarRadius;
+                    
+                    const rotatedRelativeX = relativePos.x * Math.cos(-playerYaw) - relativePos.z * Math.sin(-playerYaw);
+                    const rotatedRelativeY = relativePos.x * Math.sin(-playerYaw) + relativePos.z * Math.cos(-playerYaw);
+
+                    const x = centerX + rotatedRelativeX / maxRange * radarRadius;
+                    const y = centerY + rotatedRelativeY / maxRange * radarRadius;
+                    
+                    ctx.fillStyle = '#00ffff'; // Cyan for missile pickups
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2); // Slightly larger dot
+                    ctx.fill();
+                }
+            });
+
+            // Draw ammo pickups
+            this.ammoPickups.forEach(pickup => {
+                const relativePos = pickup.position.clone().sub(this.playerJet.position);
+                const distance = relativePos.length();
+                const maxRange = 1000; // Same radar range as enemies
+                
+                if (distance < maxRange) {
+                    const radarDistance = (distance / maxRange) * radarRadius;
+                    
+                    const rotatedRelativeX = relativePos.x * Math.cos(-playerYaw) - relativePos.z * Math.sin(-playerYaw);
+                    const rotatedRelativeY = relativePos.x * Math.sin(-playerYaw) + relativePos.z * Math.cos(-playerYaw);
+
+                    const x = centerX + rotatedRelativeX / maxRange * radarRadius;
+                    const y = centerY + rotatedRelativeY / maxRange * radarRadius;
+                    
+                    ctx.fillStyle = '#ffff00'; // Yellow for ammo pickups
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2); // Slightly larger dot
+                    ctx.fill();
+                }
+            });
         }
     }
     
@@ -2400,6 +2492,7 @@ class SkyWarriorGame {
             this.checkPlayerBuildingCollision();
             this.checkPlayerEnemyCollision();
             this.checkPickupCollisions(); // Check for pickup collisions
+            this.updatePickups(deltaTime); // Update pickup animations
             
             this.enemies.forEach(enemy => {
                 this.updateEnemyAI(enemy, deltaTime, this.bullets, this.missiles);
