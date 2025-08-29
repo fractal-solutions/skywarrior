@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKY WARRIOR - 3D Fighter Jet Combat</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            color: #fff;
+        }
+        
+        #gameContainer {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        
+        .ui-element {
+            pointer-events: auto;
+        }
+        
+        /* Main Menu */
+        #mainMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border: 2px solid #ff6600;
+            border-radius: 10px;
+        }
+        
+        #mainMenu h1 {
+            font-size: 48px;
+            color: #ff6600;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px #ff6600;
+        }
+        
+        .menu-button {
+            display: block;
+            width: 200px;
+            margin: 10px auto;
+            padding: 15px;
+            background: linear-gradient(45deg, #ff6600, #ff9900);
+            border: none;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        
+        .menu-button:hover {
+            background: linear-gradient(45deg, #ff9900, #ffcc00);
+            transform: scale(1.05);
+        }
+        
+        .menu-button.disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        .menu-button.disabled:hover {
+            transform: none;
+            background: #555;
+        }
+        
+        /* HUD Elements */
+        #hud {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            color: #ff6600;
+            font-size: 14px;
+            text-shadow: 0 0 5px rgba(255, 102, 0, 0.8);
+        }
+        
+        .hud-panel {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid #ff6600;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #altitudePanel {
+            top: 20px;
+            left: 20px;
+        }
+        
+        #speedPanel {
+            top: 20px;
+            right: 20px;
+        }
+        
+        #weaponPanel {
+            bottom: 20px;
+            left: 20px;
+        }
+        
+        #radarPanel {
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 200px;
+        }
+        
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 2px solid #ff6600;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(255, 102, 0, 0.8);
+        }
+        
+        #crosshair::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 8px;
+            background: #ff6600;
+            border-radius: 50%;
+        }
+        
+        #missionInfo {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            min-width: 300px;
+        }
+        
+        #healthBar {
+            bottom: 100px;
+            left: 20px;
+            width: 200px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 0, 0, 0.3);
+            border: 1px solid #ff6600;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff0000, #ff6600);
+            transition: width 0.3s;
+        }
+        
+        /* Settings Menu */
+        #settingsMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border: 2px solid #ff6600;
+            border-radius: 10px;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .setting-group {
+            margin-bottom: 20px;
+        }
+        
+        .setting-group h3 {
+            color: #ff6600;
+            margin-bottom: 10px;
+        }
+        
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .setting-control {
+            background: rgba(255, 102, 0, 0.2);
+            border: 1px solid #ff6600;
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 3px;
+        }
+        
+        /* Instructions */
+        #instructionsMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border: 2px solid #ff6600;
+            border-radius: 10px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        .control-group h3 {
+            color: #ff6600;
+            margin-bottom: 10px;
+        }
+        
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        
+        /* Mission Results */
+        #missionResults {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 40px;
+            border: 2px solid #ff6600;
+            border-radius: 10px;
+            text-align: center;
+            min-width: 400px;
+        }
+        
+        .result-stat {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        /* Pause Menu */
+        #pauseMenu {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border: 2px solid #ff6600;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        /* Radar styling */
+        #radarCanvas {
+            width: 100%;
+            height: 100%;
+            border: 1px solid #ff6600;
+            background: rgba(0, 50, 0, 0.3);
+        }
+        
+        /* Loading screen */
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(255, 102, 0, 0.3);
+            border-top: 5px solid #ff6600;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Restart instruction */
+        .restart-hint {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ff6600;
+            font-size: 12px;
+            text-align: center;
+            opacity: 0.7;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            #mainMenu h1 {
+                font-size: 32px;
+            }
+            
+            .menu-button {
+                width: 150px;
+                font-size: 14px;
+                padding: 12px;
+            }
+            
+            .hud-panel {
+                font-size: 12px;
+                padding: 8px;
+            }
+            
+            #radarPanel {
+                width: 150px;
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <!-- Loading Screen -->
+        <div id="loadingScreen">
+            <h1 style="color: #ff6600; font-size: 36px; margin-bottom: 30px;">SKY WARRIOR</h1>
+            <div class="spinner"></div>
+            <p style="color: #fff; margin-top: 20px;">Loading Fighter Jet Combat...</p>
+        </div>
+        
+        <!-- Three.js Scene Container -->
+        <div id="scene-container"></div>
+        
+        <!-- UI Overlay -->
+        <div id="ui">
+            <!-- Main Menu -->
+            <div id="mainMenu" class="ui-element">
+                <h1>SKY WARRIOR</h1>
+                <p style="color: #ccc; margin-bottom: 30px;">Elite Fighter Jet Combat</p>
+                <button class="menu-button" onclick="game.startMission(1)">New Game</button>
+                <button class="menu-button" onclick="game.showMissionSelect()">Mission Select</button>
+                <button class="menu-button" onclick="game.showSettings()">Settings</button>
+                <button class="menu-button" onclick="game.showInstructions()">Instructions</button>
+                <button class="menu-button" onclick="game.showAbout()">About</button>
+            </div>
+            
+            <!-- HUD -->
+            <div id="hud">
+                <div id="crosshair"></div>
+                
+                <div id="altitudePanel" class="hud-panel">
+                    <div>ALTITUDE</div>
+                    <div id="altitudeValue">5000 ft</div>
+                    <div>THROTTLE</div>
+                    <div id="throttleValue">50%</div>
+                </div>
+                
+                <div id="speedPanel" class="hud-panel">
+                    <div>SPEED</div>
+                    <div id="speedValue">250 kts</div>
+                    <div>G-FORCE</div>
+                    <div id="gforceValue">1.0g</div>
+                </div>
+                
+                <div id="weaponPanel" class="hud-panel">
+                    <div>WEAPON</div>
+                    <div id="weaponType">CANNON</div>
+                    <div>AMMO</div>
+                    <div id="ammoCount">500/500</div>
+                </div>
+                
+                <div id="missionInfo" class="hud-panel">
+                    <div id="missionTitle">TRAINING MISSION</div>
+                    <div id="missionObjective">Destroy all enemy targets</div>
+                    <div id="scoreDisplay">SCORE: 0</div>
+                </div>
+                
+                <div id="healthBar" class="hud-panel">
+                    <div>AIRCRAFT INTEGRITY</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="healthFill" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <div id="afterburnerBar" class="hud-panel" style="bottom: 150px; left: 20px; width: 200px;">
+                    <div>AFTERBURNER</div>
+                    <div class="progress-bar" style="background: rgba(0, 170, 255, 0.3);">
+                        <div class="progress-fill" id="afterburnerFill" style="width: 100%; background: linear-gradient(90deg, #00aaff, #00ffff);"></div>
+                    </div>
+                </div>
+                
+                <div id="radarPanel" class="hud-panel">
+                    <canvas id="radarCanvas" width="180" height="180"></canvas>
+                </div>
+            </div>
+            
+            <!-- Settings Menu -->
+            <div id="settingsMenu" class="ui-element hidden">
+                <h2 style="color: #ff6600; text-align: center; margin-bottom: 20px;">SETTINGS</h2>
+                
+                <div class="setting-group">
+                    <h3>Graphics</h3>
+                    <div class="setting-row">
+                        <span>Render Distance:</span>
+                        <input type="range" class="setting-control" id="renderDistance" min="1000" max="5000" value="3000">
+                    </div>
+                    <div class="setting-row">
+                        <span>Particle Effects:</span>
+                        <select class="setting-control" id="particleEffects">
+                            <option value="high">High</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    <div class="setting-row">
+                        <span>Shadow Quality:</span>
+                        <select class="setting-control" id="shadowQuality">
+                            <option value="high">High</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="low">Low</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <h3>Audio</h3>
+                    <div class="setting-row">
+                        <span>Master Volume:</span>
+                        <input type="range" class="setting-control" id="masterVolume" min="0" max="100" value="70">
+                    </div>
+                    <div class="setting-row">
+                        <span>SFX Volume:</span>
+                        <input type="range" class="setting-control" id="sfxVolume" min="0" max="100" value="80">
+                    </div>
+                    <div class="setting-row">
+                        <span>Music Volume:</span>
+                        <input type="range" class="setting-control" id="musicVolume" min="0" max="100" value="60">
+                    </div>
+                </div>
+                
+                <div class="setting-group">
+                    <h3>Controls</h3>
+                    <div class="setting-row">
+                        <span>Mouse Sensitivity:</span>
+                        <input type="range" class="setting-control" id="mouseSensitivity" min="0.1" max="2.0" step="0.1" value="1.0">
+                    </div>
+                    <div class="setting-row">
+                        <span>Invert Y-Axis:</span>
+                        <input type="checkbox" class="setting-control" id="invertY">
+                    </div>
+                    <div class="setting-row">
+                        <span>Control Mode:</span>
+                        <select class="setting-control" id="controlMode">
+                            <option value="arcade" selected>Arcade</option>
+                            <option value="simulation">Simulation</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="menu-button" onclick="game.saveSettings()">Save</button>
+                    <button class="menu-button" onclick="game.hideSettings()">Back</button>
+                </div>
+            </div>
+            
+            <!-- Instructions Menu -->
+            <div id="instructionsMenu" class="ui-element hidden">
+                <h2 style="color: #ff6600; text-align: center; margin-bottom: 20px;">PILOT INSTRUCTIONS</h2>
+                
+                <div class="control-group">
+                    <h3>Flight Controls</h3>
+                    <div class="control-row"><span>W/S:</span><span>Throttle Up/Down</span></div>
+                    <div class="control-row"><span>Arrow Keys:</span><span>Pitch/Yaw</span></div>
+                    <div class="control-row"><span>A/D:</span><span>Roll Left/Right</span></div>
+                    <div class="control-row"><span>Mouse:</span><span>Look Around (Arcade Mode)</span></div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Combat Controls</h3>
+                    <div class="control-row"><span>Space/Left Click:</span><span>Fire Primary Weapon</span></div>
+                    <div class="control-row"><span>F:</span><span>Fire Missiles</span></div>
+                    <div class="control-row"><span>Tab:</span><span>Cycle Targets</span></div>
+                    <div class="control-row"><span>R:</span><span>Lock Target</span></div>
+                    <div class="control-row"><span>B:</span><span>Chaff/Flares</span></div>
+                    <div class="control-row"><span>1/2:</span><span>Select Weapon</span></div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>System Controls</h3>
+                    <div class="control-row"><span>P/Escape:</span><span>Pause Game</span></div>
+                    <div class="control-row"><span>P (when dead):</span><span>Quick Restart</span></div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>Mission Types</h3>
+                    <p><strong>Training:</strong> Learn basic flight and combat</p>
+                    <p><strong>Air Superiority:</strong> Eliminate all enemy fighters</p>
+                    <p><strong>Ground Attack:</strong> Destroy ground targets</p>
+                    <p><strong>Escort:</strong> Protect friendly units</p>
+                    <p><strong>Boss Battle:</strong> Defeat enemy ace pilot</p>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px;">
+                    <button class="menu-button" onclick="game.hideInstructions()">Back</button>
+                </div>
+            </div>
+            
+            <!-- Pause Menu -->
+            <div id="pauseMenu" class="ui-element hidden">
+                <h2 style="color: #ff6600; margin-bottom: 20px;">GAME PAUSED</h2>
+                <button class="menu-button" onclick="game.resumeGame()">Resume</button>
+                <button class="menu-button" onclick="game.showSettings()">Settings</button>
+                <button class="menu-button" onclick="game.restartMission()">Restart Mission</button>
+                <button class="menu-button" onclick="game.returnToMenu()">Main Menu</button>
+            </div>
+            
+            <!-- Mission Results -->
+            <div id="missionResults" class="ui-element hidden">
+                <h2 id="missionResultTitle" style="color: #ff6600; margin-bottom: 20px;">MISSION COMPLETE</h2>
+                <div class="result-stat">
+                    <span>Score:</span>
+                    <span id="finalScore">0</span>
+                </div>
+                <div class="result-stat">
+                    <span>Targets Destroyed:</span>
+                    <span id="targetsDestroyed">0</span>
+                </div>
+                <div class="result-stat">
+                    <span>Accuracy:</span>
+                    <span id="accuracy">0%</span>
+                </div>
+                <div class="result-stat">
+                    <span>Time:</span>
+                    <span id="missionTime">00:00</span>
+                </div>
+                <div style="margin-top: 30px;">
+                    <button id="nextMissionButton" class="menu-button" onclick="game.nextMission()">Next Mission</button>
+                    <button class="menu-button" onclick="game.returnToMenu()">Main Menu</button>
+                </div>
+                <div class="restart-hint">Press P for Quick Restart</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
