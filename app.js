@@ -22,6 +22,8 @@ class SkyWarriorGame {
         this.missionStartTime = 0;
         this.shotsFired = 0;
         this.hits = 0;
+        this.missileWarning = false;
+        this.missileWarningTimer = 0;
         
         // Flight physics
         this.gForce = 1.0;
@@ -1400,6 +1402,40 @@ class SkyWarriorGame {
         
         // Update radar
         this.updateRadar();
+
+        // Missile Warning System
+        let incomingMissileThreat = false;
+        const warningDistance = 500; // Distance to start warning
+        const warningAngle = Math.PI / 4; // 45 degrees in front of player
+
+        this.missiles.forEach(missile => {
+            const data = missile.userData;
+            if (data.firedBy !== this.playerJet) { // Only consider enemy missiles
+                const toPlayer = this.playerJet.position.clone().sub(missile.position);
+                const missileForward = new THREE.Vector3(0, 1, 0).applyQuaternion(missile.quaternion);
+
+                const dot = toPlayer.normalize().dot(missileForward);
+
+                if (toPlayer.length() < warningDistance && dot > Math.cos(warningAngle)) {
+                    incomingMissileThreat = true;
+                }
+            }
+        });
+
+        if (incomingMissileThreat) {
+            this.missileWarning = true;
+            this.missileWarningTimer = 0.5; // Flash for 0.5 seconds
+        } else {
+            this.missileWarning = false;
+        }
+
+        // Apply missile warning flash
+        const hudElement = document.getElementById('hud'); // Or a specific warning div
+        if (this.missileWarning && Math.floor(Date.now() / 100) % 2 === 0) { // Flash every 100ms
+            hudElement.style.backgroundColor = 'rgba(255, 0, 0, 0.2)'; // Red overlay
+        } else {
+            hudElement.style.backgroundColor = 'transparent';
+        }
     }
     
     updateRadar() {
@@ -1412,6 +1448,10 @@ class SkyWarriorGame {
         // Clear radar
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
+        // Player's current yaw (heading)
+        const playerForwardWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(this.playerJet.quaternion);
+        const playerYaw = Math.atan2(playerForwardWorld.z, playerForwardWorld.x);
+
         // Draw radar circle
         ctx.strokeStyle = '#ff6600';
         ctx.lineWidth = 2;
@@ -1435,20 +1475,12 @@ class SkyWarriorGame {
         ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Draw player orientation
-        const playerForwardWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(this.playerJet.quaternion);
-        // Project to XZ plane (radar's XY)
-        const playerForwardRadarX = playerForwardWorld.x;
-        const playerForwardRadarY = playerForwardWorld.z; // Assuming radar Y is world Z
-        const playerForwardAngle = Math.atan2(playerForwardRadarY, playerForwardRadarX);
-
-        const orientationLineLength = 8;
+        // Draw player orientation (always points up on the radar)
         ctx.strokeStyle = '#00ff00';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(centerX, centerY);
-        ctx.lineTo(centerX + Math.cos(playerForwardAngle) * orientationLineLength,
-                   centerY + Math.sin(playerForwardAngle) * orientationLineLength);
+        ctx.lineTo(centerX, centerY - 8); // Line pointing straight up
         ctx.stroke();
         
         // Draw enemies
@@ -1460,35 +1492,25 @@ class SkyWarriorGame {
                 
                 if (distance < maxRange) {
                     const radarDistance = (distance / maxRange) * radarRadius;
-                    const angle = Math.atan2(relativePos.z, relativePos.x);
                     
-                    const x = centerX + Math.cos(angle) * radarDistance;
-                    const y = centerY + Math.sin(angle) * radarDistance;
+                    // Rotate relative position by inverse of player's yaw, adjusted for canvas Y-up
+                    const rotationAngle = -(playerYaw + Math.PI / 2); // Corrected rotation angle
+                    
+                    const rotatedRelativeX = relativePos.x * Math.cos(rotationAngle) - relativePos.z * Math.sin(rotationAngle);
+                    const rotatedRelativeY = relativePos.x * Math.sin(rotationAngle) + relativePos.z * Math.cos(rotationAngle);
+
+                    const x = centerX + rotatedRelativeX / maxRange * radarRadius;
+                    const y = centerY + rotatedRelativeY / maxRange * radarRadius; // Canvas Y is down, so no inversion here
                     
                     ctx.fillStyle = enemy === this.targetedEnemy ? '#ffff00' : '#ff0000';
                     ctx.beginPath();
                     ctx.arc(x, y, 2, 0, Math.PI * 2);
                     ctx.fill();
 
-                    // Draw enemy orientation
+                    // Draw enemy orientation relative to player's upright view
                     const enemyForwardWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(enemy.quaternion);
-                    // Project to XZ plane (radar's XY)
-                    const enemyForwardRadarX = enemyForwardWorld.x;
-                    const enemyForwardRadarY = enemyForwardWorld.z; // Assuming radar Y is world Z
-
-                    // Calculate angle relative to the enemy's position on the radar
-                    // This needs to be relative to the player's forward, not absolute world forward
-                    // The radar is player-centric, so enemy orientation should be relative to player's current heading
+                    const enemyForwardRelative = enemyForwardWorld.clone().applyAxisAngle(new THREE.Vector3(0,1,0), rotationAngle);
                     
-                    // To get enemy's orientation relative to player's forward on radar:
-                    // 1. Get enemy's world forward vector.
-                    // 2. Get player's world forward vector.
-                    // 3. Rotate enemy's forward vector by inverse of player's quaternion (to get it into player's local space)
-                    // 4. Project that local vector onto XZ plane.
-
-                    const playerQuaternionInverse = this.playerJet.quaternion.clone().invert();
-                    const enemyForwardRelative = enemyForwardWorld.clone().applyQuaternion(playerQuaternionInverse);
-
                     const enemyOrientationAngle = Math.atan2(enemyForwardRelative.z, enemyForwardRelative.x);
 
                     const enemyOrientationLineLength = 5; // Shorter line for enemies
@@ -1499,6 +1521,48 @@ class SkyWarriorGame {
                     ctx.lineTo(x + Math.cos(enemyOrientationAngle) * enemyOrientationLineLength,
                                y + Math.sin(enemyOrientationAngle) * enemyOrientationLineLength);
                     ctx.stroke();
+                }
+            });
+
+            // Draw missiles
+            this.missiles.forEach(missile => {
+                const data = missile.userData;
+                // Only draw enemy-fired missiles on radar
+                if (data.firedBy !== this.playerJet) {
+                    const relativePos = missile.position.clone().sub(this.playerJet.position);
+                    const distance = relativePos.length();
+                    const maxRange = 1000; // Same radar range as enemies
+                    
+                    if (distance < maxRange) {
+                        const radarDistance = (distance / maxRange) * radarRadius;
+                        
+                        // Rotate relative position by inverse of player's yaw
+                        const rotatedRelativeX = relativePos.x * Math.cos(-playerYaw) - relativePos.z * Math.sin(-playerYaw);
+                        const rotatedRelativeY = relativePos.x * Math.sin(-playerYaw) + relativePos.z * Math.cos(-playerYaw);
+
+                        const x = centerX + rotatedRelativeX / maxRange * radarRadius;
+                        const y = centerY + rotatedRelativeY / maxRange * radarRadius;
+                        
+                        ctx.fillStyle = '#ff00ff'; // Magenta for incoming missiles
+                        ctx.beginPath();
+                        ctx.arc(x, y, 2, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Optionally draw missile orientation (small line)
+                        const missileForwardWorld = new THREE.Vector3(0, 1, 0).applyQuaternion(missile.quaternion); // Missile forward is Y
+                        const missileForwardRelative = missileForwardWorld.clone().applyAxisAngle(new THREE.Vector3(0,1,0), -playerYaw);
+                        
+                        const missileOrientationAngle = Math.atan2(missileForwardRelative.z, missileForwardRelative.x);
+
+                        const missileOrientationLineLength = 4; // Very short line
+                        ctx.strokeStyle = '#ff00ff';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x + Math.cos(missileOrientationAngle) * missileOrientationLineLength,
+                                   y + Math.sin(missileOrientationAngle) * missileOrientationLineLength);
+                        ctx.stroke();
+                    }
                 }
             });
         }
