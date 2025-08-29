@@ -112,7 +112,8 @@ class SkyWarriorGame {
                 aggressiveness: 0.6,
                 canFireMissiles: false,
                 missileChance: 0,
-                turnRate: 0.08, // New property
+                turnRate: 0.08,
+                canEvade: true, // New property
                 lore: "Agile reconnaissance units, often deployed in swarms. Easily dispatched but hard to hit."
             },
             'assault': {
@@ -123,8 +124,9 @@ class SkyWarriorGame {
                 speed: 150,
                 aggressiveness: 0.8,
                 canFireMissiles: true,
-                missileChance: 0.005, // 0.5% chance per update cycle
-                turnRate: 0.05, // New property
+                missileChance: 0.05, // Increased for testing
+                turnRate: 0.05,
+                canEvade: true, // New property
                 lore: "The backbone of the enemy fleet, these versatile fighters engage targets with both cannons and homing missiles."
             },
             'heavy': {
@@ -136,7 +138,8 @@ class SkyWarriorGame {
                 aggressiveness: 0.4,
                 canFireMissiles: false,
                 missileChance: 0,
-                turnRate: 0.02, // New property
+                turnRate: 0.02,
+                canEvade: false, // New property: Heavy bombers do not evade
                 lore: "Slow but heavily armored, Heavy Bombers are designed to withstand significant damage while delivering devastating payloads."
             }
         };
@@ -716,22 +719,28 @@ class SkyWarriorGame {
     
     fireMissile() {
         if (this.ammo.missiles > 0) {
-            this.createHomingMissile(this.playerJet.position, this.targetedEnemy); // Pass target, which can be null
+            this.createHomingMissile(this.playerJet.position, this.targetedEnemy, this.playerJet); // Pass firing entity
             this.ammo.missiles--;
             this.updateHUD();
         }
     }
 
-    createHomingMissile(position, target) {
+    createHomingMissile(position, target, firingEntity) {
         const missileGeometry = new THREE.CylinderGeometry(0.5, 1, 8, 8);
         const missileMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xffffff });
         const missile = new THREE.Mesh(missileGeometry, missileMaterial);
-        missile.position.copy(position);
-
-        // Copy player's orientation
-        missile.quaternion.copy(this.playerJet.quaternion);
-        // Rotate missile to align its Y-axis with player's X-axis (forward)
+        
+        // Copy firing entity's orientation
+        missile.quaternion.copy(firingEntity.quaternion);
+        // Rotate missile to align its Y-axis with firing entity's X-axis (forward)
         missile.rotateZ(-Math.PI / 2); // Rotate -90 degrees around Z-axis
+
+        // Calculate starting position slightly in front of firing entity
+        const forwardOffset = new THREE.Vector3(1, 0, 0); // Assuming X is forward for the entity
+        forwardOffset.applyQuaternion(firingEntity.quaternion);
+        forwardOffset.multiplyScalar(firingEntity.userData.size * 2 || 20); // Offset based on entity size
+
+        missile.position.copy(position).add(forwardOffset);
 
         missile.userData = {
             type: 'missile',
@@ -740,7 +749,8 @@ class SkyWarriorGame {
             speed: 300,
             turnRate: 0.05,
             homingStartTime: Date.now(),
-            homingDuration: 5000
+            homingDuration: 5000,
+            firedBy: firingEntity // Store the firing entity
         };
 
         this.scene.add(missile);
@@ -1012,7 +1022,7 @@ class SkyWarriorGame {
         }
     }
     
-    updateEnemyAI(enemy, deltaTime) {
+    updateEnemyAI(enemy, deltaTime, allBullets, allMissiles) {
         if (!enemy.userData || !this.playerJet) return;
         
         const data = enemy.userData;
@@ -1025,55 +1035,102 @@ class SkyWarriorGame {
         
         // Update evasion timer
         data.evasionTimer = Math.max(0, data.evasionTimer - deltaTime);
+
+        // Declare targetDirection here and initialize it
+        let targetDirection = new THREE.Vector3(); // Initialize with a default vector
+
+        // Projectile Evasion Logic
+        let threatDetected = false;
+        const evasionThreshold = 100; // Distance to start evading
+        const evasionStrength = 0.2; // How strongly to evade (reduced)
+
+        if (data.canEvade) { // Only apply evasion if enemy can evade
+            // Check player bullets
+            allBullets.forEach(bullet => {
+                if (bullet.userData.isPlayer) {
+                    const bulletPos = bullet.position;
+                    const bulletVel = bullet.userData.velocity.clone().normalize();
+                    const toEnemy = enemyPos.clone().sub(bulletPos);
+                    const dot = toEnemy.dot(bulletVel);
+
+                    if (dot > 0 && toEnemy.length() < evasionThreshold) { // Bullet is in front and close
+                        // Calculate evasion direction perpendicular to bullet path
+                        let evasionDirection = new THREE.Vector3();
+                        if (Math.abs(bulletVel.x) > 0.1 || Math.abs(bulletVel.z) > 0.1) { // If not mostly vertical
+                            evasionDirection.crossVectors(bulletVel, new THREE.Vector3(0, 1, 0)).normalize();
+                        } else { // If mostly vertical, cross with X-axis
+                            evasionDirection.crossVectors(bulletVel, new THREE.Vector3(1, 0, 0)).normalize();
+                        }
+                        
+                        if (Math.random() > 0.5) evasionDirection.negate(); // Randomize evasion side
+                        
+                        data.attackMode = 'evade';
+                        data.evasionTimer = 1.0; // Evade for 1 second
+                        targetDirection = evasionDirection.multiplyScalar(evasionStrength);
+                        threatDetected = true;
+                    }
+                }d
+            });
+
+            // Check player missiles (more aggressive evasion)
+            if (!threatDetected) { // Only check missiles if no bullet threat
+                allMissiles.forEach(missile => {
+                    if (missile.userData.type === 'missile' && missile.userData.target === enemy) { // Missile is targeting this enemy
+                        const missilePos = missile.position;
+                        const missileVel = new THREE.Vector3(0, 1, 0).applyQuaternion(missile.quaternion).normalize(); // Missile's forward
+                        const toEnemy = enemyPos.clone().sub(missilePos);
+                        const dot = toEnemy.dot(missileVel);
+
+                        if (dot > 0 && toEnemy.length() < evasionThreshold * 2) { // Missile is in front and closer
+                            let evasionDirection = new THREE.Vector3();
+                            if (Math.abs(missileVel.x) > 0.1 || Math.abs(missileVel.z) > 0.1) { // If not mostly vertical
+                                evasionDirection.crossVectors(missileVel, new THREE.Vector3(0, 1, 0)).normalize();
+                            } else { // If mostly vertical, cross with X-axis
+                                evasionDirection.crossVectors(missileVel, new THREE.Vector3(1, 0, 0)).normalize();
+                            }
+                            if (Math.random() > 0.5) evasionDirection.negate();
+                            
+                            data.attackMode = 'evade';
+                            data.evasionTimer = 2.0; // Evade for 2 seconds
+                            targetDirection = evasionDirection.multiplyScalar(evasionStrength * 2); // Stronger evasion
+                            threatDetected = true;
+                        }
+                    }
+                });
+            }
+        } // End of if (data.canEvade)
         
         // Determine AI behavior based on distance and current mode
-        let targetDirection = new THREE.Vector3();
-        
-        if (distance < data.retreatDistance) {
-            // Too close - retreat and evade
-            data.attackMode = 'evade';
+        // targetDirection is already declared at the top of the function
+
+        if (data.attackMode === 'evade' && data.evasionTimer > 0) {
+            // Continue current evasion (targetDirection already set by projectile evasion or proximity retreat)
+        } else if (distance < data.retreatDistance) {
+            // Too close - initiate retreat
+            data.attackMode = 'evade'; // Use 'evade' mode for retreat as well
+            data.evasionTimer = 2.0; // Retreat for 2 seconds
             targetDirection = directionToPlayer.clone().negate(); // Move away from player
-            
-            // Add perpendicular movement for evasion
             const perpendicular = new THREE.Vector3(-directionToPlayer.z, 0, directionToPlayer.x);
             perpendicular.multiplyScalar(data.circleDirection);
-            targetDirection.add(perpendicular.multiplyScalar(0.8));
-            
-            data.evasionTimer = 2.0; // Set evasion timer
-            
-        } else if (distance > data.attackDistance && data.attackMode !== 'evade') {
+            targetDirection.add(perpendicular.multiplyScalar(0.2)); // Reduced perpendicular movement
+        } else if (distance > data.attackDistance) {
             // Too far - approach player
             data.attackMode = 'approach';
             targetDirection = directionToPlayer.clone();
-            
-        } else if (data.evasionTimer <= 0) {
+        } else {
             // Good attack distance - circle around player
             data.attackMode = 'circle';
-            
-            // Create circular movement around player
             const perpendicular = new THREE.Vector3(-directionToPlayer.z, 0, directionToPlayer.x);
             perpendicular.multiplyScalar(data.circleDirection);
-            
-            // Mix perpendicular movement with slight approach/retreat
             targetDirection = perpendicular.clone().multiplyScalar(0.7);
-            
-            // Occasionally change circle direction
             if (Math.random() < 0.01) {
                 data.circleDirection *= -1;
             }
-            
-            // Add slight movement toward/away to maintain distance
             const distanceError = distance - data.attackDistance;
             if (Math.abs(distanceError) > 50) {
                 const correction = directionToPlayer.clone().multiplyScalar(distanceError > 0 ? -0.3 : 0.3);
                 targetDirection.add(correction);
             }
-        } else {
-            // Continue evasion
-            targetDirection = directionToPlayer.clone().negate();
-            const perpendicular = new THREE.Vector3(-directionToPlayer.z, 0, directionToPlayer.x);
-            perpendicular.multiplyScalar(data.circleDirection);
-            targetDirection.add(perpendicular.multiplyScalar(0.8));
         }
         
         // Add some randomness for unpredictability
@@ -1088,7 +1145,7 @@ class SkyWarriorGame {
         const targetVelocity = targetDirection.multiplyScalar(data.speed);
         
         // Smooth velocity transition
-        data.velocity.lerp(targetVelocity, deltaTime * 1.5);
+        data.velocity.lerp(targetVelocity, deltaTime * 0.5); // Reduced from 1.5
         
         // Apply movement
         enemy.position.add(data.velocity.clone().multiplyScalar(deltaTime));
@@ -1125,10 +1182,10 @@ class SkyWarriorGame {
         }
 
         // Enemy missile firing logic
-        if (data.canFireMissiles && data.target && distance < 1000 && aimDot > 0.5 && Math.random() < data.missileChance) {
+        if (data.canFireMissiles && data.target && distance < 1000 && aimDot > 0.2 && Math.random() < data.missileChance) {
             // Ensure enemy doesn't spam missiles
             if (Date.now() - data.lastShot > 3000) { // 3 second cooldown
-                this.createHomingMissile(enemyPos.clone(), this.playerJet); // Enemy missiles target player
+                this.createHomingMissile(enemyPos.clone(), this.playerJet, enemy); // Pass firing entity
                 data.lastShot = Date.now();
             }
         }
@@ -1215,6 +1272,12 @@ class SkyWarriorGame {
 
             // Collision detection
             this.enemies.forEach((enemy, enemyIndex) => {
+                // Ignore collision with firing entity for a short duration
+                const ignoreCollisionTime = 500; // milliseconds
+                if (data.firedBy === enemy && (Date.now() - data.homingStartTime) < ignoreCollisionTime) {
+                    return; // Skip collision check for the firing entity
+                }
+
                 if (missile.position.distanceTo(enemy.position) < 15) {
                     // Hit enemy
                     enemy.userData.health -= 50; // More damage than bullets
@@ -1709,7 +1772,7 @@ class SkyWarriorGame {
             this.updateTargeting();
             
             this.enemies.forEach(enemy => {
-                this.updateEnemyAI(enemy, deltaTime); // Uncommented this line
+                this.updateEnemyAI(enemy, deltaTime, this.bullets, this.missiles);
             });
             
             this.updateBullets(deltaTime);
