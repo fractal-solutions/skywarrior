@@ -1110,9 +1110,13 @@ class SkyWarriorGame {
             data.attackMode = 'evade'; // Use 'evade' mode for retreat as well
             data.evasionTimer = 2.0; // Retreat for 2 seconds
             targetDirection = directionToPlayer.clone().negate(); // Move away from player
-            const perpendicular = new THREE.Vector3(-directionToPlayer.z, 0, directionToPlayer.x);
-            perpendicular.multiplyScalar(data.circleDirection);
-            targetDirection.add(perpendicular.multiplyScalar(0.2)); // Reduced perpendicular movement
+            
+            // Only add perpendicular movement if the enemy can evade (i.e., not heavy bomber)
+            if (data.canEvade) {
+                const perpendicular = new THREE.Vector3(-directionToPlayer.z, 0, directionToPlayer.x);
+                perpendicular.multiplyScalar(data.circleDirection);
+                targetDirection.add(perpendicular.multiplyScalar(0.2)); // Reduced perpendicular movement
+            }
         } else if (distance > data.attackDistance) {
             // Too far - approach player
             data.attackMode = 'approach';
@@ -1271,6 +1275,9 @@ class SkyWarriorGame {
             
 
             // Collision detection
+            let hit = false; // Flag to indicate if missile hit something
+
+            // Check collision with enemies
             this.enemies.forEach((enemy, enemyIndex) => {
                 // Ignore collision with firing entity for a short duration
                 const ignoreCollisionTime = 500; // milliseconds
@@ -1298,14 +1305,23 @@ class SkyWarriorGame {
                         this.createExplosion(missile.position, 1.5);
                     }
                     
-                    // Remove missile
-                    this.scene.remove(missile);
-                    this.missiles.splice(i, 1);
+                    hit = true; // Missile hit an enemy
                 }
             });
 
-            data.life--;
-            if (data.life <= 0) {
+            // Check collision with player (only if missile was fired by an enemy)
+            if (!hit && data.firedBy !== this.playerJet && this.playerJet && missile.position.distanceTo(this.playerJet.position) < 20) {
+                this.health -= 50; // Missiles do more damage
+                this.createExplosion(missile.position, 1.5);
+                hit = true;
+                
+                if (this.health <= 0) {
+                    this.endMission(false);
+                }
+            }
+
+            // Remove missile if hit or expired
+            if (hit || data.life <= 0) { // Removed || missile.position.y < -50 as it's not relevant for missiles
                 this.scene.remove(missile);
                 this.missiles.splice(i, 1);
             }
