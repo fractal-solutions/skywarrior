@@ -161,7 +161,7 @@ class SkyWarriorGame {
         this.init();
     }
     
-    init() {
+    async init() {
         this.setupScene();
         this.setupControls();
         this.loadSettings();
@@ -169,7 +169,7 @@ class SkyWarriorGame {
         this.createTerrain();
         this.createSkybox();
         this.setupAudio(); // New: Setup audio
-        this.loadSounds(); // New: Load sounds
+        await this.loadSounds(); // New: Load sounds asynchronously
         
         // Hide loading screen after a short delay and show start screen
         setTimeout(() => {
@@ -187,43 +187,56 @@ class SkyWarriorGame {
     }
 
     loadSounds() {
-        const soundFiles = [
-            { name: 'collision', path: 'audio/collision.wav' },
-            { name: 'enemy-sound', path: 'audio/enemy-sound.wav' },
-            { name: 'explosion', path: 'audio/explosion.wav' },
-            { name: 'game-music', path: 'audio/game-music.wav' },
-            { name: 'game-over', path: 'audio/game-over.wav' },
-            { name: 'game-start-click', path: 'audio/game-start-click.wav' },
-            { name: 'ingame-pickup', path: 'audio/ingame-pickup.wav' },
-            { name: 'menu-hover', path: 'audio/menu-hover.wav' },
-            { name: 'menu-music', path: 'audio/menu-music.wav' },
-            { name: 'missile-alert', path: 'audio/missile-alert.wav' },
-            { name: 'missile-launch', path: 'audio/missile-launch.mp3' },
-            { name: 'cannon-fire', path: 'audio/cannon-fire.mp3' },
-            { name: 'player-engine', path: 'audio/player-engine.mp3' },
-            { name: 'player-afterburner', path: 'audio/player-afterburner.mp3' }
-        ];
+        return new Promise((resolve, reject) => {
+            const soundFiles = [
+                { name: 'collision', path: 'audio/collision.wav' },
+                { name: 'enemy-sound', path: 'audio/enemy-sound.wav' },
+                { name: 'explosion', path: 'audio/explosion.wav' },
+                { name: 'game-music', path: 'audio/game-music.wav' },
+                { name: 'game-over', path: 'audio/game-over.wav' },
+                { name: 'game-start-click', path: 'audio/game-start-click.wav' },
+                { name: 'ingame-pickup', path: 'audio/ingame-pickup.wav' },
+                { name: 'menu-hover', path: 'audio/menu-hover.wav' },
+                { name: 'menu-music', path: 'audio/menu-music.wav' },
+                { name: 'missile-alert', path: 'audio/missile-alert.wav' },
+                { name: 'missile-launch', path: 'audio/missile-launch.mp3' },
+                { name: 'cannon-fire', path: 'audio/cannon-fire.mp3' },
+                { name: 'player-engine', path: 'audio/player-engine.mp3' },
+                { name: 'player-afterburner', path: 'audio/player-afterburner.mp3' }
+            ];
 
-        let loadedCount = 0;
-        const totalSounds = soundFiles.length;
+            let loadedCount = 0;
+            const totalSounds = soundFiles.length;
 
-        soundFiles.forEach(sound => {
-            this.audioLoader.load(sound.path, (buffer) => {
-                this.sounds[sound.name] = buffer;
-                loadedCount++;
-                if (loadedCount === totalSounds) {
-                    console.log("All sounds loaded.");
-                }
-            }, (xhr) => {
-                // console.log((xhr.loaded / xhr.total * 100) + '% loaded ' + sound.name);
-            }, (err) => {
-                console.error('An error happened loading sound: ' + sound.name, err);
+            if (totalSounds === 0) {
+                resolve();
+                return;
+            }
+
+            soundFiles.forEach(sound => {
+                this.audioLoader.load(sound.path, (buffer) => {
+                    this.sounds[sound.name] = buffer;
+                    loadedCount++;
+                    if (loadedCount === totalSounds) {
+                        console.log("All sounds loaded.");
+                        resolve();
+                    }
+                }, (xhr) => {
+                    // console.log((xhr.loaded / xhr.total * 100) + '% loaded ' + sound.name);
+                }, (err) => {
+                    console.error('An error happened loading sound: ' + sound.name, err);
+                    reject(err); // Reject the promise if any sound fails to load
+                });
             });
         });
     }
 
     playSFX(name, volume = 1.0) {
         if (this.sounds[name] && this.audioListener) {
+            // Resume AudioContext if suspended
+            if (this.audioListener.context.state === 'suspended') {
+                this.audioListener.context.resume().catch(e => console.error("Error resuming AudioContext for SFX:", e));
+            }
             const sound = new THREE.Audio(this.audioListener);
             sound.setBuffer(this.sounds[name]);
             sound.setVolume(volume * (this.settings.sfxVolume / 100));
@@ -235,6 +248,10 @@ class SkyWarriorGame {
 
     playMusic(name, volume = 0.5, loop = true) {
         if (this.sounds[name] && this.audioListener) {
+            // Resume AudioContext if suspended
+            if (this.audioListener.context.state === 'suspended') {
+                this.audioListener.context.resume().catch(e => console.error("Error resuming AudioContext for Music:", e));
+            }
             // Stop any currently playing music
             if (this.currentMusic) {
                 this.currentMusic.stop();
@@ -450,6 +467,7 @@ class SkyWarriorGame {
             this.playerEngineSound.setLoop(true);
             this.playerEngineSound.setVolume(0); // Start silent
             this.playerJet.add(this.playerEngineSound);
+            this.playerEngineSound.play(); // Start playing immediately but silently
         }
 
         if (this.sounds['player-afterburner']) {
@@ -458,6 +476,7 @@ class SkyWarriorGame {
             this.playerAfterburnerSound.setLoop(true);
             this.playerAfterburnerSound.setVolume(0); // Start silent
             this.playerJet.add(this.playerAfterburnerSound);
+            this.playerAfterburnerSound.play(); // Start playing immediately but silently
         }
     }
     
@@ -1321,7 +1340,7 @@ class SkyWarriorGame {
         // Update engine and afterburner sound volumes
         if (this.playerEngineSound) {
             // Map throttle (0-1) to a suitable volume range (e.g., 0.2 to 1.0)
-            const engineVolume = 0.2 + (this.throttle * 0.8);
+            const engineVolume = (0.2 + (this.throttle * 0.8)) * 0.7; // Added 0.7 multiplier to lower volume
             this.playerEngineSound.setVolume(engineVolume * (this.settings.sfxVolume / 100));
         }
         if (this.playerAfterburnerSound) {
@@ -2341,19 +2360,7 @@ class SkyWarriorGame {
         console.log("Attempting to play game music...");
         this.playMusic('game-music');
 
-        // Start player engine and afterburner sounds
-        console.log("Attempting to play engine and afterburner sounds...");
-        if (this.playerEngineSound) {
-            console.log("playerEngineSound exists:", this.playerEngineSound);
-            console.log("playerEngineSound buffer:", !!this.playerEngineSound.buffer);
-            this.playerEngineSound.play();
-        }
-        if (this.playerAfterburnerSound) {
-            console.log("playerAfterburnerSound exists:", this.playerAfterburnerSound);
-            console.log("playerAfterburnerSound buffer:", !!this.playerAfterburnerSound.buffer);
-            this.playerAfterburnerSound.play();
-        }
-        console.log("AudioContext state:", this.audioListener.context.state);
+        
 
         // Create a new camera to ensure a clean state
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
@@ -2418,11 +2425,13 @@ class SkyWarriorGame {
         this.stopMusic(); // Stop game music
 
         // Stop player engine and afterburner sounds
-        if (this.playerEngineSound) {
+        if (this.playerEngineSound && this.playerEngineSound.isPlaying) {
             this.playerEngineSound.stop();
+            this.playerEngineSound = null;
         }
-        if (this.playerAfterburnerSound) {
+        if (this.playerAfterburnerSound && this.playerAfterburnerSound.isPlaying) {
             this.playerAfterburnerSound.stop();
+            this.playerAfterburnerSound = null;
         }
 
         if (!success) {

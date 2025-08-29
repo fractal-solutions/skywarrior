@@ -603,8 +603,9 @@
                     <button id="nextMissionButton" class="menu-button" onclick="game.playSFX('game-start-click'); game.nextMission()" onmouseover="game.playSFX('menu-hover')">Next Mission</button>
                     <button class="menu-button" onclick="game.playSFX('game-start-click'); game.returnToMenu()" onmouseover="game.playSFX('menu-hover')">Main Menu</button>
                 </div>
-                <div class="restart-hint">Press P for Quick Restart</div>
+                <div class="restart-hint" id="restartHint">Press P for Quick Restart</div>
             </div>
+            <div id="pauseHint" class="hud-panel" style="top: 20px; left: 50%; transform: translateX(-50%); text-align: center; display: none;">Press P to Pause</div>
         </div>
     </div>
 
