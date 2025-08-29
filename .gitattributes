@@ -1,0 +1,2 @@
+sky-warrior-linux filter=lfs diff=lfs merge=lfs -text
+sky-warriors.exe filter=lfs diff=lfs merge=lfs -text

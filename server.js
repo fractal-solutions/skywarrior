@@ -3,7 +3,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const PORT = 3000;
-const PUBLIC_DIR = import.meta.dir; // Current directory where server.js is located
+const PUBLIC_DIR = process.cwd(); // Current directory where server.js is located
 
 serve({
   port: PORT,

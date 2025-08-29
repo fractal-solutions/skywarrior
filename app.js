@@ -46,7 +46,7 @@ class SkyWarriorGame {
         this.turnRate = 3.5; // Increased turn rate
         this.pitchRate = 2.5; // Increased pitch rate
         this.rollRate = 4.5; // Increased roll rate
-        
+
         // Controls
         this.keys = {};
         this.mouse = { x: 0, y: 0, deltaX: 0, deltaY: 0 };
