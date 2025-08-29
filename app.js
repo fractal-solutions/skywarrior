@@ -214,7 +214,7 @@ class SkyWarriorGame {
                     event.preventDefault();
                     this.firePrimaryWeapon();
                     break;
-                case 'KeyF':
+                case 'ControlLeft':
                     this.fireMissile();
                     break;
                 case 'Tab':
@@ -233,9 +233,6 @@ class SkyWarriorGame {
                     break;
                 case 'Digit1':
                     this.selectWeapon('cannon');
-                    break;
-                case 'Digit2':
-                    this.selectWeapon('missiles');
                     break;
             }
         } else if (this.gameState === 'paused') {
@@ -549,8 +546,8 @@ class SkyWarriorGame {
     }
     
     fireMissile() {
-        if (this.selectedWeapon === 'missiles' && this.ammo.missiles > 0 && this.targetedEnemy) {
-            this.createHomingMissile(this.playerJet.position, this.targetedEnemy);
+        if (this.ammo.missiles > 0) {
+            this.createHomingMissile(this.playerJet.position, this.targetedEnemy); // Pass target, which can be null
             this.ammo.missiles--;
             this.updateHUD();
         }
@@ -562,14 +559,19 @@ class SkyWarriorGame {
         const missile = new THREE.Mesh(missileGeometry, missileMaterial);
         missile.position.copy(position);
 
+        // Copy player's orientation
+        missile.quaternion.copy(this.playerJet.quaternion);
+        // Rotate missile to align its Y-axis with player's X-axis (forward)
+        missile.rotateZ(-Math.PI / 2); // Rotate -90 degrees around Z-axis
+
         missile.userData = {
             type: 'missile',
             target: target,
-            life: 200, // longer lifetime
+            life: 200,
             speed: 300,
             turnRate: 0.05,
             homingStartTime: Date.now(),
-            homingDuration: 5000 // 5 seconds of homing
+            homingDuration: 5000
         };
 
         this.scene.add(missile);
@@ -797,20 +799,26 @@ class SkyWarriorGame {
         let closestDist = Infinity;
 
         const screenCenter = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
+        const playerForward = new THREE.Vector3(1, 0, 0).applyQuaternion(this.playerJet.quaternion);
 
         this.enemies.forEach(enemy => {
             const enemyPos = new THREE.Vector3();
             enemy.getWorldPosition(enemyPos);
 
-            const enemyScreenPos = enemyPos.clone().project(this.camera);
-            const screenX = (enemyScreenPos.x + 1) * window.innerWidth / 2;
-            const screenY = (-enemyScreenPos.y + 1) * window.innerHeight / 2;
+            const toEnemy = new THREE.Vector3().subVectors(enemyPos, this.playerJet.position);
+            const dot = toEnemy.dot(playerForward);
 
-            const dist = new THREE.Vector2(screenX, screenY).distanceTo(screenCenter);
+            if (dot > 0) { // Check if enemy is in front of the player
+                const enemyScreenPos = enemyPos.clone().project(this.camera);
+                const screenX = (enemyScreenPos.x + 1) * window.innerWidth / 2;
+                const screenY = (-enemyScreenPos.y + 1) * window.innerHeight / 2;
 
-            if (dist < closestDist && dist < 200) { // 200px threshold
-                closestDist = dist;
-                closestEnemy = enemy;
+                const dist = new THREE.Vector2(screenX, screenY).distanceTo(screenCenter);
+
+                if (dist < closestDist && dist < 200) { // 200px threshold
+                    closestDist = dist;
+                    closestEnemy = enemy;
+                }
             }
         });
 
@@ -1018,14 +1026,42 @@ class SkyWarriorGame {
             // Homing logic
             if (data.target && (Date.now() - data.homingStartTime) < data.homingDuration) {
                 const targetDirection = new THREE.Vector3().subVectors(data.target.position, missile.position).normalize();
-                missile.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), targetDirection), data.turnRate);
+                missile.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), targetDirection), data.turnRate);
             }
 
             // Move missile forward
-            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(missile.quaternion);
+            const forward = new THREE.Vector3(0, 1, 0).applyQuaternion(missile.quaternion);
             missile.position.add(forward.multiplyScalar(data.speed * deltaTime));
 
-            // ... collision detection ...
+            
+
+            // Collision detection
+            this.enemies.forEach((enemy, enemyIndex) => {
+                if (missile.position.distanceTo(enemy.position) < 15) {
+                    // Hit enemy
+                    enemy.userData.health -= 50; // More damage than bullets
+                    this.score += 200;
+                    
+                    if (enemy.userData.health <= 0) {
+                        // Destroy enemy
+                        this.createExplosion(enemy.position, 3); // Bigger explosion
+                        this.scene.remove(enemy);
+                        this.enemies.splice(enemyIndex, 1);
+                        this.score += 1000;
+                        
+                        // Clear target if destroyed
+                        if (this.targetedEnemy === enemy) {
+                            this.targetedEnemy = null;
+                        }
+                    } else {
+                        this.createExplosion(missile.position, 1.5);
+                    }
+                    
+                    // Remove missile
+                    this.scene.remove(missile);
+                    this.missiles.splice(i, 1);
+                }
+            });
 
             data.life--;
             if (data.life <= 0) {
