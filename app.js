@@ -8,6 +8,8 @@ class SkyWarriorGame {
         this.bullets = [];
         this.missiles = [];
         this.explosions = [];
+        this.enemiesToDestroy = [];
+        this.buildings = [];
         this.terrain = null;
         
         // Game state
@@ -259,6 +261,7 @@ class SkyWarriorGame {
                     this.firePrimaryWeapon();
                     break;
                 case 'ControlLeft':
+                case 'ControlRight':
                     this.fireMissile();
                     break;
                 case 'Tab':
@@ -538,10 +541,46 @@ class SkyWarriorGame {
             wireframe: false
         });
         
-        // Add height variation
+        // Add height variation with craters/valleys
         const vertices = groundGeometry.attributes.position.array;
+        const numCraters = 5; // Number of large features
+        const featureRadius = 1000; // Radius of each feature
+        const maxFeatureDepth = 150; // Max depth/height of features
+
+        // Generate random feature centers
+        const featureCenters = [];
+        for (let i = 0; i < numCraters; i++) {
+            featureCenters.push(new THREE.Vector2(
+                (Math.random() - 0.5) * 8000, // X position within terrain bounds
+                (Math.random() - 0.5) * 8000  // Z position within terrain bounds
+            ));
+        }
+
         for (let i = 0; i < vertices.length; i += 3) {
-            vertices[i + 2] = Math.random() * 50 - 25; // Random height
+            const x = vertices[i];
+            const z = vertices[i + 1]; // Z-coordinate is stored in y for PlaneGeometry
+
+            let height = Math.random() * 50 - 25; // Base random height
+
+            // Apply features
+            for (let j = 0; j < numCraters; j++) {
+                const center = featureCenters[j];
+                const dist = Math.sqrt(Math.pow(x - center.x, 2) + Math.pow(z - center.y, 2));
+
+                if (dist < featureRadius) {
+                    const normalizedDist = dist / featureRadius;
+                    // Use a smooth curve for the feature (e.g., cosine or cubic)
+                    const featureEffect = Math.cos(normalizedDist * Math.PI) * 0.5 + 0.5; // 0 to 1, peaks at center
+
+                    // Randomly make it a crater or a hill
+                    if (Math.random() < 0.5) { // Crater
+                        height -= featureEffect * maxFeatureDepth;
+                    } else { // Hill
+                        height += featureEffect * maxFeatureDepth;
+                    }
+                }
+            }
+            vertices[i + 2] = height;
         }
         groundGeometry.attributes.position.needsUpdate = true;
         groundGeometry.computeVertexNormals();
@@ -553,24 +592,88 @@ class SkyWarriorGame {
         this.scene.add(ground);
         
         // Add some buildings/obstacles
-        for (let i = 0; i < 20; i++) {
-            const buildingGeometry = new THREE.BoxGeometry(
-                20 + Math.random() * 40,
-                50 + Math.random() * 100,
-                20 + Math.random() * 40
-            );
-            const buildingMaterial = new THREE.MeshLambertMaterial({ 
-                color: new THREE.Color().setHSL(0, 0, 0.3 + Math.random() * 0.3)
-            });
-            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-            building.position.set(
+        // Add some futuristic buildings/obstacles
+        for (let i = 0; i < 70; i++) { // Increased number of buildings for a denser city
+            const buildingType = Math.random();
+            let buildingGroup = new THREE.Group();
+            let buildingHeight;
+
+            if (buildingType < 0.6) { // Tall, slender towers
+                const width = 15 + Math.random() * 25;
+                const depth = 15 + Math.random() * 25;
+                buildingHeight = 100 + Math.random() * 250; // Very tall
+                const towerGeometry = new THREE.BoxGeometry(width, buildingHeight, depth);
+                const towerMaterial = new THREE.MeshLambertMaterial({
+                    color: new THREE.Color().setHSL(0, 0, 0.4 + Math.random() * 0.2),
+                    emissive: 0x003366, // Subtle blue glow
+                    emissiveIntensity: 0.2
+                });
+                const tower = new THREE.Mesh(towerGeometry, towerMaterial);
+                tower.position.y = buildingHeight / 2;
+                buildingGroup.add(tower);
+
+                // Add a small antenna/spire on top
+                const spireGeometry = new THREE.CylinderGeometry(1, 3, 20, 4);
+                const spireMaterial = new THREE.MeshLambertMaterial({ color: 0xaaaaaa });
+                const spire = new THREE.Mesh(spireGeometry, spireMaterial);
+                spire.position.y = buildingHeight + 10;
+                buildingGroup.add(spire);
+
+            } else if (buildingType < 0.9) { // Wider, blockier structures with glowing panels
+                const width = 40 + Math.random() * 80;
+                const depth = 40 + Math.random() * 80;
+                buildingHeight = 50 + Math.random() * 120;
+                const blockGeometry = new THREE.BoxGeometry(width, buildingHeight, depth);
+                const blockMaterial = new THREE.MeshLambertMaterial({
+                    color: new THREE.Color().setHSL(0, 0, 0.3 + Math.random() * 0.2),
+                    emissive: 0x660033, // Subtle purple glow
+                    emissiveIntensity: 0.15
+                });
+                const block = new THREE.Mesh(blockGeometry, blockMaterial);
+                block.position.y = buildingHeight / 2;
+                buildingGroup.add(block);
+
+                // Add glowing strips
+                const stripMaterial = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.7 });
+                for (let j = 0; j < 4; j++) {
+                    const stripGeometry = new THREE.BoxGeometry(width * 0.8, 5, 2);
+                    const strip = new THREE.Mesh(stripGeometry, stripMaterial);
+                    strip.position.set(0, (Math.random() - 0.5) * buildingHeight * 0.8, depth / 2 + 1);
+                    strip.rotation.y = Math.PI / 2 * j;
+                    buildingGroup.add(strip);
+                }
+
+            } else { // Low, sprawling industrial complexes
+                const width = 80 + Math.random() * 150;
+                const depth = 80 + Math.random() * 150;
+                buildingHeight = 20 + Math.random() * 60;
+                const complexGeometry = new THREE.BoxGeometry(width, buildingHeight, depth);
+                const complexMaterial = new THREE.MeshLambertMaterial({
+                    color: new THREE.Color().setHSL(0, 0, 0.2 + Math.random() * 0.1),
+                    emissive: 0x333300, // Subtle yellow glow
+                    emissiveIntensity: 0.1
+                });
+                const complex = new THREE.Mesh(complexGeometry, complexMaterial);
+                complex.position.y = buildingHeight / 2;
+                buildingGroup.add(complex);
+
+                // Add small domes
+                const domeGeometry = new THREE.SphereGeometry(10 + Math.random() * 15, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+                const domeMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+                const dome = new THREE.Mesh(domeGeometry, domeMaterial);
+                dome.position.set((Math.random() - 0.5) * width * 0.6, buildingHeight, (Math.random() - 0.5) * depth * 0.6);
+                buildingGroup.add(dome);
+            }
+
+            buildingGroup.position.set(
                 (Math.random() - 0.5) * 4000,
-                -50,
+                -100, // Base of the group is at ground level
                 (Math.random() - 0.5) * 4000
             );
-            building.castShadow = true;
-            building.receiveShadow = true;
-            this.scene.add(building);
+            buildingGroup.castShadow = true;
+            buildingGroup.receiveShadow = true; // Apply to group for all children
+            this.scene.add(buildingGroup);
+            this.buildings.push(buildingGroup); // Add building to the array
         }
     }
     
@@ -954,6 +1057,33 @@ class SkyWarriorGame {
         }
     }
 
+    checkPlayerBuildingCollision() {
+        if (!this.playerJet) return;
+
+        const playerBox = new THREE.Box3().setFromObject(this.playerJet);
+
+        for (let i = this.buildings.length - 1; i >= 0; i--) {
+            const building = this.buildings[i];
+            const buildingBox = new THREE.Box3().setFromObject(building);
+
+            if (playerBox.intersectsBox(buildingBox)) {
+                // Collision detected!
+                this.health -= 20; // Reduce player health
+                this.createExplosion(this.playerJet.position, 1); // Small explosion on impact
+
+                // Simple collision response: push player away from the building
+                const collisionNormal = new THREE.Vector3().subVectors(this.playerJet.position, building.position).normalize();
+                this.playerJet.position.add(collisionNormal.multiplyScalar(50)); // Push away
+                this.velocity.multiplyScalar(0.5); // Reduce player speed on impact
+
+                if (this.health <= 0) {
+                    this.endMission(false); // End mission if health drops to 0
+                }
+                // For now, buildings are indestructible. Later, we can add building destruction.
+            }
+        }
+    }
+
     updateCamera(deltaTime) {
         if (!this.playerJet) return;
 
@@ -1155,6 +1285,25 @@ class SkyWarriorGame {
         
         // Apply movement
         enemy.position.add(data.velocity.clone().multiplyScalar(deltaTime));
+
+        // Enemy-Building Collision Detection
+        const enemyBox = new THREE.Box3().setFromObject(enemy);
+        this.buildings.forEach(building => {
+            const buildingBox = new THREE.Box3().setFromObject(building);
+
+            if (enemyBox.intersectsBox(buildingBox)) {
+                // Collision detected!
+                enemy.userData.health -= 10; // Enemy takes damage
+                this.createExplosion(enemy.position, 0.5); // Small explosion on impact
+
+                // Simple collision response: push enemy away from the building
+                const collisionNormal = new THREE.Vector3().subVectors(enemy.position, building.position).normalize();
+                enemy.position.add(collisionNormal.multiplyScalar(20)); // Push away
+                data.velocity.multiplyScalar(-0.5); // Reverse and reduce speed
+
+                // If enemy health drops to 0, it will be handled by updateBullets/updateMissiles
+            }
+        });
         
         // Orient enemy jet to face movement direction
         if (data.velocity.length() > 0.1) {
@@ -1197,6 +1346,37 @@ class SkyWarriorGame {
         }
     }
     
+    checkPlayerEnemyCollision() {
+        if (!this.playerJet) return;
+
+        const playerBox = new THREE.Box3().setFromObject(this.playerJet);
+
+        this.enemies.forEach(enemy => {
+            const enemyBox = new THREE.Box3().setFromObject(enemy);
+
+            if (playerBox.intersectsBox(enemyBox)) {
+                // Collision detected!
+                this.health -= 30; // Player takes significant damage
+                enemy.userData.health -= 50; // Enemy takes significant damage
+
+                this.createExplosion(this.playerJet.position, 1.5); // Explosion at collision point
+
+                // Simple collision response: push both away from each other
+                const collisionNormal = new THREE.Vector3().subVectors(this.playerJet.position, enemy.position).normalize();
+                this.playerJet.position.add(collisionNormal.clone().multiplyScalar(30));
+                enemy.position.sub(collisionNormal.clone().multiplyScalar(30));
+
+                this.velocity.multiplyScalar(0.2); // Reduce player speed
+                enemy.userData.velocity.multiplyScalar(0.2); // Reduce enemy speed
+
+                if (this.health <= 0) {
+                    this.endMission(false);
+                }
+                // Enemy health check will be handled by updateBullets/updateMissiles in the next frame
+            }
+        });
+    }
+
     updateBullets(deltaTime) {
         for (let i = this.bullets.length - 1; i >= 0; i--) {
             const bullet = this.bullets[i];
@@ -1221,10 +1401,32 @@ class SkyWarriorGame {
                         this.score += 100;
                         
                         if (enemy.userData.health <= 0) {
-                            // Destroy enemy
-                            this.createExplosion(enemy.position, 2);
-                            this.scene.remove(enemy);
-                            this.enemies.splice(enemyIndex, 1);
+                            // Mark enemy for destruction and make it fall
+                            enemy.userData.health = 0; // Ensure health is 0
+                            enemy.userData.destroyed = true;
+                            enemy.userData.initialVelocity = new THREE.Vector3(
+                                (Math.random() - 0.5) * 50, // Random horizontal velocity
+                                0, // Start with 0 vertical velocity, gravity will add to it
+                                (Math.random() - 0.5) * 50
+                            );
+                            enemy.userData.fallSpeed = 0; // Current vertical speed due to gravity
+                            enemy.userData.rotationSpeed = new THREE.Vector3(
+                                (Math.random() - 0.5) * 0.1,
+                                (Math.random() - 0.5) * 0.1,
+                                (Math.random() - 0.5) * 0.1
+                            );
+                            
+                            // Change material to a "wreck" material (e.g., darker, more metallic)
+                            enemy.traverse(child => {
+                                if (child.isMesh) {
+                                    child.material = new THREE.MeshLambertMaterial({ color: 0x333333, flatShading: true });
+                                }
+                            });
+
+                            this.enemiesToDestroy.push(enemy); // Add to new array for falling
+                            this.enemies.splice(enemyIndex, 1); // Remove from active enemies array
+
+                            this.createExplosion(enemy.position, 2); // Still create explosion at impact point
                             this.score += 500;
                             
                             // Clear target if destroyed
@@ -1293,10 +1495,32 @@ class SkyWarriorGame {
                     this.score += 200;
                     
                     if (enemy.userData.health <= 0) {
-                        // Destroy enemy
-                        this.createExplosion(enemy.position, 3); // Bigger explosion
-                        this.scene.remove(enemy);
-                        this.enemies.splice(enemyIndex, 1);
+                        // Mark enemy for destruction and make it fall
+                        enemy.userData.health = 0; // Ensure health is 0
+                        enemy.userData.destroyed = true;
+                        enemy.userData.initialVelocity = new THREE.Vector3(
+                            (Math.random() - 0.5) * 50, // Random horizontal velocity
+                            0, // Start with 0 vertical velocity, gravity will add to it
+                            (Math.random() - 0.5) * 50
+                        );
+                        enemy.userData.fallSpeed = 0; // Current vertical speed due to gravity
+                        enemy.userData.rotationSpeed = new THREE.Vector3(
+                            (Math.random() - 0.5) * 0.1,
+                            (Math.random() - 0.5) * 0.1,
+                            (Math.random() - 0.5) * 0.1
+                        );
+                        
+                        // Change material to a "wreck" material (e.g., darker, more metallic)
+                        enemy.traverse(child => {
+                            if (child.isMesh) {
+                                child.material = new THREE.MeshLambertMaterial({ color: 0x333333, flatShading: true });
+                            }
+                        });
+
+                        this.enemiesToDestroy.push(enemy); // Add to new array for falling
+                        this.enemies.splice(enemyIndex, 1); // Remove from active enemies array
+
+                        this.createExplosion(enemy.position, 3); // Still create bigger explosion at impact point
                         this.score += 1000;
                         
                         // Clear target if destroyed
@@ -1365,6 +1589,40 @@ class SkyWarriorGame {
         }
     }
     
+    updateDestroyedEnemies(deltaTime) {
+        const gravity = 9.8 * 5; // Increased gravity for faster fall
+
+        for (let i = this.enemiesToDestroy.length - 1; i >= 0; i--) {
+            const enemy = this.enemiesToDestroy[i];
+            const data = enemy.userData;
+
+            // Apply gravity to vertical speed
+            data.fallSpeed += gravity * deltaTime;
+            enemy.position.y -= data.fallSpeed * deltaTime;
+
+            // Apply initial horizontal velocity
+            enemy.position.x += data.initialVelocity.x * deltaTime;
+            enemy.position.z += data.initialVelocity.z * deltaTime;
+
+            // Apply rotation
+            enemy.rotation.x += data.rotationSpeed.x;
+            enemy.rotation.y += data.rotationSpeed.y;
+            enemy.rotation.z += data.rotationSpeed.z;
+
+            // Add smoke/fire particles as it falls
+            if (Math.random() < 0.3) { // Emit particles frequently
+                this.createExplosion(enemy.position, 0.2); // Small, continuous smoke/fire
+            }
+
+            // Check for ground collision
+            if (enemy.position.y < -90) { // Assuming ground is at -100, give some buffer
+                this.createExplosion(enemy.position, 5); // Large explosion on impact
+                this.scene.remove(enemy);
+                this.enemiesToDestroy.splice(i, 1);
+            }
+        }
+    }
+
     updateHUD() {
         if (this.gameState !== 'playing') return;
         
@@ -1896,6 +2154,8 @@ class SkyWarriorGame {
             this.updatePlayerPhysics(deltaTime);
             this.updateCamera(deltaTime);
             this.updateTargeting();
+            this.checkPlayerBuildingCollision();
+            this.checkPlayerEnemyCollision();
             
             this.enemies.forEach(enemy => {
                 this.updateEnemyAI(enemy, deltaTime, this.bullets, this.missiles);
@@ -1904,6 +2164,7 @@ class SkyWarriorGame {
             this.updateBullets(deltaTime);
             this.updateMissiles(deltaTime);
             this.updateExplosions(deltaTime);
+            this.updateDestroyedEnemies(deltaTime);
             this.updateHUD();
             this.checkMissionComplete();
         }
