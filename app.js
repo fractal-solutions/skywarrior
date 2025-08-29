@@ -102,6 +102,45 @@ class SkyWarriorGame {
             }
         ];
         
+        this.enemyTypes = {
+            'scout': {
+                name: 'Scout Drone',
+                model: 'dodecahedron', // Placeholder, will define actual models later
+                size: 3,
+                health: 50,
+                speed: 200,
+                aggressiveness: 0.6,
+                canFireMissiles: false,
+                missileChance: 0,
+                turnRate: 0.08, // New property
+                lore: "Agile reconnaissance units, often deployed in swarms. Easily dispatched but hard to hit."
+            },
+            'assault': {
+                name: 'Assault Fighter',
+                model: 'box', // Placeholder
+                size: 7,
+                health: 150,
+                speed: 150,
+                aggressiveness: 0.8,
+                canFireMissiles: true,
+                missileChance: 0.005, // 0.5% chance per update cycle
+                turnRate: 0.05, // New property
+                lore: "The backbone of the enemy fleet, these versatile fighters engage targets with both cannons and homing missiles."
+            },
+            'heavy': {
+                name: 'Heavy Bomber',
+                model: 'sphere', // Placeholder
+                size: 15,
+                health: 300,
+                speed: 80,
+                aggressiveness: 0.4,
+                canFireMissiles: false,
+                missileChance: 0,
+                turnRate: 0.02, // New property
+                lore: "Slow but heavily armored, Heavy Bombers are designed to withstand significant damage while delivering devastating payloads."
+            }
+        };
+        
         this.init();
     }
     
@@ -306,33 +345,164 @@ class SkyWarriorGame {
         this.velocity.set(0, 0, 0);
     }
     
-    createEnemy(position) {
+    createEnemy(position, enemyType = 'scout') { // Default to scout if type not provided
+        let typeData = this.enemyTypes[enemyType];
+        if (!typeData) {
+            console.warn(`Unknown enemy type: ${enemyType}. Defaulting to scout.`);
+            enemyType = 'scout';
+            typeData = this.enemyTypes[enemyType];
+        }
+
         const enemyGroup = new THREE.Group();
         const enemyMaterial = new THREE.MeshLambertMaterial({ color: 0xff4444, flatShading: true });
 
-        // Central Body
-        const bodyGeom = new THREE.DodecahedronGeometry(5);
-        const body = new THREE.Mesh(bodyGeom, enemyMaterial);
-        enemyGroup.add(body);
+        // Create model based on typeData.model
+        let body; // Declare body outside switch
+        let bodyGeom; // Declare bodyGeom outside switch
+        switch (typeData.model) {
+            case 'dodecahedron': // Scout Drone
+                // Central body (capsule-like)
+                bodyGeom = new THREE.CylinderGeometry(typeData.size * 0.5, typeData.size * 0.5, typeData.size * 2, 8);
+                body = new THREE.Mesh(bodyGeom, enemyMaterial);
+                body.rotation.z = Math.PI / 2; // Orient along X-axis
+                enemyGroup.add(body);
 
-        // Spikes
-        for (let i = 0; i < 4; i++) {
-            const spikeGeom = new THREE.CylinderGeometry(0, 0.8, 10, 4);
-            const spike = new THREE.Mesh(spikeGeom, enemyMaterial);
-            const angle = (i / 4) * Math.PI * 2;
-            spike.position.set(Math.cos(angle) * 6, 0, Math.sin(angle) * 6);
-            spike.lookAt(enemyGroup.position);
-            enemyGroup.add(spike);
+                // Swept-back wings
+                const wingShape = new THREE.Shape();
+                wingShape.moveTo(0, 0);
+                wingShape.lineTo(typeData.size * 2, typeData.size * 0.5);
+                wingShape.lineTo(typeData.size * 1.5, 0);
+                wingShape.lineTo(typeData.size * 2, -typeData.size * 0.5);
+                wingShape.lineTo(0, 0);
+
+                const extrudeSettings = {
+                    steps: 1,
+                    depth: typeData.size * 0.2,
+                    bevelEnabled: false
+                };
+
+                const wingGeometry = new THREE.ExtrudeGeometry(wingShape, extrudeSettings);
+                const wingMaterial = new THREE.MeshLambertMaterial({ color: 0xaaaaaa, flatShading: true });
+
+                const leftWing = new THREE.Mesh(wingGeometry, wingMaterial);
+                leftWing.position.set(typeData.size * 0.5, 0, typeData.size * 0.8);
+                leftWing.rotation.y = Math.PI / 2;
+                enemyGroup.add(leftWing);
+
+                const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
+                rightWing.position.set(typeData.size * 0.5, 0, -typeData.size * 0.8);
+                rightWing.rotation.y = Math.PI / 2;
+                rightWing.scale.z = -1;
+                enemyGroup.add(rightWing);
+
+                // Thrusters
+                const thrusterGeometry = new THREE.CylinderGeometry(typeData.size * 0.2, typeData.size * 0.3, typeData.size * 0.8, 6);
+                const thrusterMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+
+                const leftThruster = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
+                leftThruster.position.set(-typeData.size * 1.2, 0, typeData.size * 0.6);
+                leftThruster.rotation.z = Math.PI / 2;
+                enemyGroup.add(leftThruster);
+
+                const rightThruster = new THREE.Mesh(thrusterGeometry, thrusterMaterial);
+                rightThruster.position.set(-typeData.size * 1.2, 0, -typeData.size * 0.6);
+                rightThruster.rotation.z = Math.PI / 2;
+                enemyGroup.add(rightThruster);
+                break;
+
+            case 'box': // Assault Fighter
+                // Main body (flattened box)
+                bodyGeom = new THREE.BoxGeometry(typeData.size * 2, typeData.size * 0.8, typeData.size * 1.5);
+                body = new THREE.Mesh(bodyGeom, enemyMaterial);
+                enemyGroup.add(body);
+
+                // Cockpit
+                const cockpitGeom = new THREE.SphereGeometry(typeData.size * 0.4, 8, 8);
+                const cockpit = new THREE.Mesh(cockpitGeom, enemyMaterial);
+                cockpit.position.set(typeData.size * 0.8, typeData.size * 0.5, 0);
+                enemyGroup.add(cockpit);
+
+                // Engine pods
+                const enginePodGeom = new THREE.CylinderGeometry(typeData.size * 0.3, typeData.size * 0.3, typeData.size * 1.2, 8);
+                const enginePodMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+
+                const leftEnginePod = new THREE.Mesh(enginePodGeom, enginePodMaterial);
+                leftEnginePod.position.set(-typeData.size * 0.8, 0, typeData.size * 0.8);
+                leftEnginePod.rotation.z = Math.PI / 2;
+                enemyGroup.add(leftEnginePod);
+
+                const rightEnginePod = new THREE.Mesh(enginePodGeom, enginePodMaterial);
+                rightEnginePod.position.set(-typeData.size * 0.8, 0, -typeData.size * 0.8);
+                rightEnginePod.rotation.z = Math.PI / 2;
+                enemyGroup.add(rightEnginePod);
+                break;
+
+            case 'sphere': // Heavy Bomber
+                // Central core (large sphere)
+                bodyGeom = new THREE.SphereGeometry(typeData.size, 16, 16);
+                body = new THREE.Mesh(bodyGeom, enemyMaterial);
+                enemyGroup.add(body);
+
+                // Armored wings/plates
+                const plateGeom = new THREE.BoxGeometry(typeData.size * 0.5, typeData.size * 0.2, typeData.size * 3);
+                const plateMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 });
+
+                const topPlate = new THREE.Mesh(plateGeom, plateMaterial);
+                topPlate.position.set(0, typeData.size * 0.8, 0);
+                enemyGroup.add(topPlate);
+
+                const bottomPlate = new THREE.Mesh(plateGeom, plateMaterial);
+                bottomPlate.position.set(0, -typeData.size * 0.8, 0);
+                enemyGroup.add(bottomPlate);
+
+                // Large thrusters
+                const largeThrusterGeom = new THREE.CylinderGeometry(typeData.size * 0.4, typeData.size * 0.6, typeData.size * 1.5, 8);
+                const largeThrusterMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+
+                const rearThruster1 = new THREE.Mesh(largeThrusterGeom, largeThrusterMaterial);
+                rearThruster1.position.set(-typeData.size * 1.2, typeData.size * 0.5, typeData.size * 0.8);
+                rearThruster1.rotation.z = Math.PI / 2;
+                enemyGroup.add(rearThruster1);
+
+                const rearThruster2 = new THREE.Mesh(largeThrusterGeom, largeThrusterMaterial);
+                rearThruster2.position.set(-typeData.size * 1.2, typeData.size * 0.5, -typeData.size * 0.8);
+                rearThruster2.rotation.z = Math.PI / 2;
+                enemyGroup.add(rearThruster2);
+
+                const rearThruster3 = new THREE.Mesh(largeThrusterGeom, largeThrusterMaterial);
+                rearThruster3.position.set(-typeData.size * 1.2, -typeData.size * 0.5, typeData.size * 0.8);
+                rearThruster3.rotation.z = Math.PI / 2;
+                enemyGroup.add(rearThruster3);
+
+                const rearThruster4 = new THREE.Mesh(largeThrusterGeom, largeThrusterMaterial);
+                rearThruster4.position.set(-typeData.size * 1.2, -typeData.size * 0.5, -typeData.size * 0.8);
+                rearThruster4.rotation.z = Math.PI / 2;
+                enemyGroup.add(rearThruster4);
+                break;
+
+            case 'pyramid': // Example of another shape
+                bodyGeom = new THREE.ConeGeometry(typeData.size, typeData.size * 2, 4);
+                body = new THREE.Mesh(bodyGeom, enemyMaterial);
+                enemyGroup.add(body);
+                break;
+
+            default:
+                bodyGeom = new THREE.DodecahedronGeometry(typeData.size);
+                body = new THREE.Mesh(bodyGeom, enemyMaterial);
+                enemyGroup.add(body);
         }
+
 
         enemyGroup.position.copy(position);
         
-        // Improved AI properties
+        // Update userData with type-specific properties
         enemyGroup.userData = {
-            type: 'enemy',
-            health: 100,
-            speed: 120 + Math.random() * 80,
-            aggressiveness: 0.4 + Math.random() * 0.6,
+            type: enemyType, // Store the type string
+            health: typeData.health,
+            speed: typeData.speed,
+            aggressiveness: typeData.aggressiveness,
+            canFireMissiles: typeData.canFireMissiles,
+            missileChance: typeData.missileChance,
             lastShot: 0,
             target: this.playerJet,
             velocity: new THREE.Vector3(
@@ -341,13 +511,12 @@ class SkyWarriorGame {
                 (Math.random() - 0.5) * 150
             ),
             targetDirection: new THREE.Vector3(),
-            // New AI properties for better behavior
-            attackDistance: 200 + Math.random() * 300, // Preferred attack distance
-            retreatDistance: 100, // Distance to retreat when too close
-            circleDirection: Math.random() > 0.5 ? 1 : -1, // Circling direction
+            attackDistance: typeData.size * 50 + Math.random() * 100, // Preferred attack distance based on size
+            retreatDistance: typeData.size * 20, // Distance to retreat when too close based on size
+            circleDirection: Math.random() > 0.5 ? 1 : -1,
             lastPlayerDirection: new THREE.Vector3(),
             evasionTimer: 0,
-            attackMode: 'approach' // approach, attack, evade, circle
+            attackMode: 'approach'
         };
         
         this.scene.add(enemyGroup);
@@ -927,8 +1096,8 @@ class SkyWarriorGame {
         // Orient enemy jet to face movement direction
         if (data.velocity.length() > 0.1) {
             const lookDirection = data.velocity.clone().normalize();
-            const targetPosition = enemy.position.clone().add(lookDirection);
-            enemy.lookAt(targetPosition);
+            // Revert to simple lookAt for testing
+            enemy.lookAt(enemy.position.clone().add(lookDirection));
         }
         
         // Keep enemy above ground
@@ -953,6 +1122,15 @@ class SkyWarriorGame {
             const leadDirection = leadPosition.sub(enemyPos).normalize();
             
             this.createBullet(enemyPos.clone(), leadDirection, false);
+        }
+
+        // Enemy missile firing logic
+        if (data.canFireMissiles && data.target && distance < 1000 && aimDot > 0.5 && Math.random() < data.missileChance) {
+            // Ensure enemy doesn't spam missiles
+            if (Date.now() - data.lastShot > 3000) { // 3 second cooldown
+                this.createHomingMissile(enemyPos.clone(), this.playerJet); // Enemy missiles target player
+                data.lastShot = Date.now();
+            }
         }
     }
     
@@ -1124,6 +1302,9 @@ class SkyWarriorGame {
             `${this.ammo.cannon}/500` : 
             `${this.ammo.missiles}/${this.maxMissiles}`;
         document.getElementById('ammoCount').textContent = ammoText;
+
+        // Add this line to update the missile count display
+        document.getElementById('missileCountDisplay').textContent = `${this.ammo.missiles}/${this.maxMissiles}`;
         
         // Update mission info
         document.getElementById('scoreDisplay').textContent = `SCORE: ${this.score}`;
@@ -1239,7 +1420,12 @@ class SkyWarriorGame {
                 50 + Math.random() * 200,
                 Math.sin(angle) * distance
             );
-            this.createEnemy(position);
+            
+            // Randomly select an enemy type
+            const enemyTypes = Object.keys(this.enemyTypes);
+            const randomType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+            
+            this.createEnemy(position, randomType); // Pass the selected type
         }
         
         // Update UI
@@ -1362,6 +1548,36 @@ class SkyWarriorGame {
         document.getElementById('mainMenu').classList.remove('hidden');
     }
     
+    showEnemyIntel() {
+        this.hideAllMenus();
+        const intelMenu = document.getElementById('enemyIntelMenu');
+        const intelContent = document.getElementById('enemyIntelContent');
+        intelContent.innerHTML = ''; // Clear previous content
+
+        for (const typeKey in this.enemyTypes) {
+            const typeData = this.enemyTypes[typeKey];
+            const enemyDiv = document.createElement('div');
+            enemyDiv.className = 'enemy-intel-entry';
+            enemyDiv.innerHTML = `
+                <h3 style="color: #00ffff;">${typeData.name}</h3>
+                <p><strong>Type:</strong> ${typeKey.charAt(0).toUpperCase() + typeKey.slice(1)}</p>
+                <p><strong>Health:</strong> ${typeData.health}</p>
+                <p><strong>Speed:</strong> ${typeData.speed}</p>
+                <p><strong>Abilities:</strong> ${typeData.canFireMissiles ? 'Missiles, Cannon' : 'Cannon'}</p>
+                <p>${typeData.lore}</p>
+                <hr style="border-color: #333; margin: 15px 0;">
+            `;
+            intelContent.appendChild(enemyDiv);
+        }
+
+        intelMenu.classList.remove('hidden');
+    }
+
+    hideEnemyIntel() {
+        document.getElementById('enemyIntelMenu').classList.add('hidden');
+        document.getElementById('mainMenu').classList.remove('hidden');
+    }
+    
     showAbout() {
         alert('SKY WARRIOR\nVersion 1.0\n\nA complete 3D fighter jet combat simulator\nBuilt with Three.js and software rendering\n\nProving that modern CPUs can handle\nimpressive 3D graphics without GPU acceleration!\n\nCreated by Berrry Computer\nberrry.app');
     }
@@ -1414,7 +1630,7 @@ class SkyWarriorGame {
     }
     
     hideAllMenus() {
-        const menus = ['mainMenu', 'settingsMenu', 'instructionsMenu', 'pauseMenu', 'missionResults'];
+        const menus = ['mainMenu', 'settingsMenu', 'instructionsMenu', 'pauseMenu', 'missionResults', 'enemyIntelMenu']; // Added enemyIntelMenu
         menus.forEach(id => {
             const element = document.getElementById(id);
             if (element) element.classList.add('hidden');
@@ -1493,7 +1709,7 @@ class SkyWarriorGame {
             this.updateTargeting();
             
             this.enemies.forEach(enemy => {
-                this.updateEnemyAI(enemy, deltaTime);
+                this.updateEnemyAI(enemy, deltaTime); // Uncommented this line
             });
             
             this.updateBullets(deltaTime);
