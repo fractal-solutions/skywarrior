@@ -15,7 +15,8 @@ class SkyWarriorGame {
         this.currentMission = 1;
         this.score = 0;
         this.health = 100;
-        this.ammo = { cannon: 500, missiles: 20 };
+        this.maxMissiles = 10;
+        this.ammo = { cannon: 500, missiles: this.maxMissiles };
         this.selectedWeapon = 'cannon';
         this.targetedEnemy = null;
         this.missionStartTime = 0;
@@ -302,17 +303,7 @@ class SkyWarriorGame {
         this.scene.add(shipGroup);
         this.playerJet = shipGroup;
 
-        // Detach camera from old jet if it exists
-        if (this.camera.parent) {
-            this.camera.parent.remove(this.camera);
-        }
-
-        // Add camera to the jet
-        this.playerJet.add(this.camera);
-
-        // Set position and orientation relative to the jet
-        this.camera.position.set(-40, 15, 0);
-        this.camera.lookAt(this.playerJet.position);
+        // Camera is now handled in updateCamera()
         
         // Initialize velocity
         this.velocity.set(0, 0, 0);
@@ -559,19 +550,30 @@ class SkyWarriorGame {
     
     fireMissile() {
         if (this.selectedWeapon === 'missiles' && this.ammo.missiles > 0 && this.targetedEnemy) {
-            // Simplified missile - just a fast bullet that homes in
-            const direction = new THREE.Vector3(1, 0, 0);
-            direction.applyQuaternion(this.playerJet.quaternion);
-            
-            const missilePosition = this.playerJet.position.clone();
-            missilePosition.add(direction.clone().multiplyScalar(25));
-            
-            this.createBullet(missilePosition, direction, true);
+            this.createHomingMissile(this.playerJet.position, this.targetedEnemy);
             this.ammo.missiles--;
-            this.shotsFired++;
-            
             this.updateHUD();
         }
+    }
+
+    createHomingMissile(position, target) {
+        const missileGeometry = new THREE.CylinderGeometry(0.5, 1, 8, 8);
+        const missileMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xffffff });
+        const missile = new THREE.Mesh(missileGeometry, missileMaterial);
+        missile.position.copy(position);
+
+        missile.userData = {
+            type: 'missile',
+            target: target,
+            life: 200, // longer lifetime
+            speed: 300,
+            turnRate: 0.05,
+            homingStartTime: Date.now(),
+            homingDuration: 5000 // 5 seconds of homing
+        };
+
+        this.scene.add(missile);
+        this.missiles.push(missile);
     }
     
     cycleTargets() {
@@ -768,6 +770,70 @@ class SkyWarriorGame {
             this.playerJet.position.z = Math.sign(this.playerJet.position.z) * maxDistance;
         }
     }
+
+    updateCamera(deltaTime) {
+        if (!this.playerJet) return;
+
+        // Desired camera position
+        const desiredPosition = new THREE.Vector3(-50, 25, 0);
+        desiredPosition.applyQuaternion(this.playerJet.quaternion);
+        desiredPosition.add(this.playerJet.position);
+
+        // Smoothly move the camera to the desired position
+        this.camera.position.lerp(desiredPosition, 0.1);
+
+        // Point the camera at a point slightly in front of the ship
+        const lookAtPoint = new THREE.Vector3(50, 0, 0);
+        lookAtPoint.applyQuaternion(this.playerJet.quaternion);
+        lookAtPoint.add(this.playerJet.position);
+
+        this.camera.lookAt(lookAtPoint);
+    }
+
+    updateTargeting() {
+        if (!this.playerJet) return;
+
+        let closestEnemy = null;
+        let closestDist = Infinity;
+
+        const screenCenter = new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2);
+
+        this.enemies.forEach(enemy => {
+            const enemyPos = new THREE.Vector3();
+            enemy.getWorldPosition(enemyPos);
+
+            const enemyScreenPos = enemyPos.clone().project(this.camera);
+            const screenX = (enemyScreenPos.x + 1) * window.innerWidth / 2;
+            const screenY = (-enemyScreenPos.y + 1) * window.innerHeight / 2;
+
+            const dist = new THREE.Vector2(screenX, screenY).distanceTo(screenCenter);
+
+            if (dist < closestDist && dist < 200) { // 200px threshold
+                closestDist = dist;
+                closestEnemy = enemy;
+            }
+        });
+
+        this.targetedEnemy = closestEnemy;
+
+        const targetBox = document.getElementById('targetBox');
+        if (this.targetedEnemy) {
+            const enemyPos = new THREE.Vector3();
+            this.targetedEnemy.getWorldPosition(enemyPos);
+            const enemyScreenPos = enemyPos.clone().project(this.camera);
+
+            const screenX = (enemyScreenPos.x + 1) * window.innerWidth / 2;
+            const screenY = (-enemyScreenPos.y + 1) * window.innerHeight / 2;
+
+            targetBox.style.display = 'block';
+            targetBox.style.left = (screenX - 25) + 'px';
+            targetBox.style.top = (screenY - 25) + 'px';
+            targetBox.style.width = '50px';
+            targetBox.style.height = '50px';
+        } else {
+            targetBox.style.display = 'none';
+        }
+    }
     
     updateEnemyAI(enemy, deltaTime) {
         if (!enemy.userData || !this.playerJet) return;
@@ -943,6 +1009,31 @@ class SkyWarriorGame {
             }
         }
     }
+
+    updateMissiles(deltaTime) {
+        for (let i = this.missiles.length - 1; i >= 0; i--) {
+            const missile = this.missiles[i];
+            const data = missile.userData;
+
+            // Homing logic
+            if (data.target && (Date.now() - data.homingStartTime) < data.homingDuration) {
+                const targetDirection = new THREE.Vector3().subVectors(data.target.position, missile.position).normalize();
+                missile.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), targetDirection), data.turnRate);
+            }
+
+            // Move missile forward
+            const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(missile.quaternion);
+            missile.position.add(forward.multiplyScalar(data.speed * deltaTime));
+
+            // ... collision detection ...
+
+            data.life--;
+            if (data.life <= 0) {
+                this.scene.remove(missile);
+                this.missiles.splice(i, 1);
+            }
+        }
+    }
     
     updateExplosions(deltaTime) {
         for (let i = this.explosions.length - 1; i >= 0; i--) {
@@ -995,7 +1086,7 @@ class SkyWarriorGame {
         document.getElementById('weaponType').textContent = this.selectedWeapon.toUpperCase();
         const ammoText = this.selectedWeapon === 'cannon' ? 
             `${this.ammo.cannon}/500` : 
-            `${this.ammo.missiles}/20`;
+            `${this.ammo.missiles}/${this.maxMissiles}`;
         document.getElementById('ammoCount').textContent = ammoText;
         
         // Update mission info
@@ -1082,7 +1173,7 @@ class SkyWarriorGame {
         // Reset game state
         this.score = 0;
         this.health = 100;
-        this.ammo = { cannon: 500, missiles: 20 };
+        this.ammo = { cannon: 500, missiles: this.maxMissiles };
         this.selectedWeapon = 'cannon';
         this.targetedEnemy = null;
         this.missionStartTime = Date.now();
@@ -1362,12 +1453,15 @@ class SkyWarriorGame {
             const deltaTime = 1/60; // Fixed timestep for consistent physics
             
             this.updatePlayerPhysics(deltaTime);
+            this.updateCamera(deltaTime);
+            this.updateTargeting();
             
             this.enemies.forEach(enemy => {
                 this.updateEnemyAI(enemy, deltaTime);
             });
             
             this.updateBullets(deltaTime);
+            this.updateMissiles(deltaTime);
             this.updateExplosions(deltaTime);
             this.updateHUD();
             this.checkMissionComplete();
