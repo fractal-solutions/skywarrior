@@ -1,6 +1,6 @@
 # SkyWarrior Game
 
-Welcome to SkyWarrior, a thrilling 3D aerial combat game!
+Welcome to SkyWarrior, a 3D aerial combat game!
 
 ## Getting Started
 
