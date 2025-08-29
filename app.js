@@ -14,6 +14,11 @@ class SkyWarriorGame {
         this.ammoPickups = [];
         this.pickupSpawnTimer = 0;
         this.terrain = null;
+
+        // Audio
+        this.audioListener = null;
+        this.audioLoader = null;
+        this.sounds = {};
         
         // Game state
         this.gameState = 'menu'; // menu, playing, paused, missionComplete
@@ -163,6 +168,8 @@ class SkyWarriorGame {
         this.setupUI();
         this.createTerrain();
         this.createSkybox();
+        this.setupAudio(); // New: Setup audio
+        this.loadSounds(); // New: Load sounds
         
         // Hide loading screen after a short delay
         setTimeout(() => {
@@ -170,6 +177,79 @@ class SkyWarriorGame {
         }, 2000);
         
         this.animate();
+    }
+
+    setupAudio() {
+        this.audioListener = new THREE.AudioListener();
+        this.camera.add(this.audioListener);
+        this.audioLoader = new THREE.AudioLoader();
+    }
+
+    loadSounds() {
+        const soundFiles = [
+            { name: 'collision', path: 'audio/collision.wav' },
+            { name: 'enemy-sound', path: 'audio/enemy-sound.wav' },
+            { name: 'explosion', path: 'audio/explosion.wav' },
+            { name: 'game-music', path: 'audio/game-music.wav' },
+            { name: 'game-over', path: 'audio/game-over.wav' },
+            { name: 'game-start-click', path: 'audio/game-start-click.wav' },
+            { name: 'ingame-pickup', path: 'audio/ingame-pickup.wav' },
+            { name: 'menu-hover', path: 'audio/menu-hover.wav' },
+            { name: 'menu-music', path: 'audio/menu-music.wav' },
+            { name: 'missile-alert', path: 'audio/missile-alert.wav' }
+        ];
+
+        let loadedCount = 0;
+        const totalSounds = soundFiles.length;
+
+        soundFiles.forEach(sound => {
+            this.audioLoader.load(sound.path, (buffer) => {
+                this.sounds[sound.name] = buffer;
+                loadedCount++;
+                if (loadedCount === totalSounds) {
+                    console.log("All sounds loaded.");
+                }
+            }, (xhr) => {
+                // console.log((xhr.loaded / xhr.total * 100) + '% loaded ' + sound.name);
+            }, (err) => {
+                console.error('An error happened loading sound: ' + sound.name, err);
+            });
+        });
+    }
+
+    playSFX(name, volume = 1.0) {
+        if (this.sounds[name] && this.audioListener) {
+            const sound = new THREE.Audio(this.audioListener);
+            sound.setBuffer(this.sounds[name]);
+            sound.setVolume(volume * (this.settings.sfxVolume / 100));
+            sound.play();
+            return sound; // Return the sound object for potential stopping/fading
+        }
+        return null;
+    }
+
+    playMusic(name, volume = 0.5, loop = true) {
+        if (this.sounds[name] && this.audioListener) {
+            // Stop any currently playing music
+            if (this.currentMusic) {
+                this.currentMusic.stop();
+            }
+            const music = new THREE.Audio(this.audioListener);
+            music.setBuffer(this.sounds[name]);
+            music.setLoop(loop);
+            music.setVolume(volume * (this.settings.musicVolume / 100));
+            music.play();
+            this.currentMusic = music;
+            return music;
+        }
+        return null;
+    }
+
+    stopMusic() {
+        if (this.currentMusic) {
+            this.currentMusic.stop();
+            this.currentMusic = null;
+        }
     }
     
     setupScene() {
@@ -988,6 +1068,7 @@ class SkyWarriorGame {
     }
     
     createExplosion(position, size = 1) {
+        this.playSFX('explosion', 0.7); // Play explosion sound
         const explosionGroup = new THREE.Group();
         
         // Create multiple particle spheres for explosion effect
@@ -1338,6 +1419,7 @@ class SkyWarriorGame {
 
             if (playerBox.intersectsBox(buildingBox)) {
                 // Collision detected!
+                this.playSFX('collision', 0.8); // Play collision sound
                 this.health -= 15; // Slightly reduced player health
                 this.createExplosion(this.playerJet.position, 0.8); // Smaller explosion on impact
 
@@ -1626,6 +1708,7 @@ class SkyWarriorGame {
 
             if (playerBox.intersectsBox(enemyBox)) {
                 // Collision detected!
+                this.playSFX('collision', 0.8); // Play collision sound
                 this.health -= 20; // Player takes moderate damage
                 enemy.userData.health -= 30; // Enemy takes moderate damage
 
@@ -1658,6 +1741,7 @@ class SkyWarriorGame {
             const pickupBox = new THREE.Box3().setFromObject(pickup);
 
             if (playerBox.intersectsBox(pickupBox)) {
+                this.playSFX('ingame-pickup', 0.6); // Play pickup sound
                 this.ammo.missiles = Math.min(this.maxMissiles, this.ammo.missiles + 3); // Add 3 missiles
                 this.scene.remove(pickup);
                 this.missilePickups.splice(i, 1);
@@ -1671,6 +1755,7 @@ class SkyWarriorGame {
             const pickupBox = new THREE.Box3().setFromObject(pickup);
 
             if (playerBox.intersectsBox(pickupBox)) {
+                this.playSFX('ingame-pickup', 0.6); // Play pickup sound
                 this.ammo.cannon += 200; // Add 200 cannon ammo
                 this.scene.remove(pickup);
                 this.ammoPickups.splice(i, 1);
@@ -1753,6 +1838,7 @@ class SkyWarriorGame {
                                 this.targetedEnemy = null;
                             }
                         } else {
+                            this.playSFX('enemy-sound', 0.4); // Play enemy hit sound
                             this.createExplosion(bullet.position, 0.5);
                         }
                         
@@ -1847,6 +1933,7 @@ class SkyWarriorGame {
                             this.targetedEnemy = null;
                         }
                     } else {
+                        this.playSFX('enemy-sound', 0.6); // Play enemy hit sound (louder for missile)
                         this.createExplosion(missile.position, 1.5);
                     }
                     
@@ -2000,6 +2087,9 @@ class SkyWarriorGame {
         });
 
         if (incomingMissileThreat) {
+            if (!this.missileWarning) { // Only play sound once when warning starts
+                this.playSFX('missile-alert', 0.5);
+            }
             this.missileWarning = true;
             this.missileWarningTimer = 0.5; // Flash for 0.5 seconds
         } else {
@@ -2024,7 +2114,6 @@ class SkyWarriorGame {
         
         // Clear radar
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
         // Player's current yaw (heading)
         const playerForwardWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(this.playerJet.quaternion);
         const playerYaw = Math.atan2(playerForwardWorld.z, playerForwardWorld.x);
@@ -2193,6 +2282,10 @@ class SkyWarriorGame {
         this.currentMission = missionId;
         const mission = this.missions[missionId - 1];
 
+        // Play game music
+        this.stopMusic(); // Stop menu music
+        this.playMusic('game-music');
+
         // Create a new camera to ensure a clean state
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
         this.applySettings(); // Re-apply settings to the new camera
@@ -2252,6 +2345,12 @@ class SkyWarriorGame {
     
     endMission(success) {
         this.gameState = 'missionComplete';
+        
+        this.stopMusic(); // Stop game music
+
+        if (!success) {
+            this.playSFX('game-over'); // Play game over sound on failure
+        }
         
         const missionTime = Math.round((Date.now() - this.missionStartTime) / 1000);
         const accuracy = this.shotsFired > 0 ? Math.round((this.hits / this.shotsFired) * 100) : 0;
@@ -2318,6 +2417,7 @@ class SkyWarriorGame {
         this.gameState = 'menu';
         this.hideAllMenus();
         document.getElementById('mainMenu').classList.remove('hidden');
+        this.playMusic('menu-music'); // Play menu music when returning to main menu
         document.getElementById('hud').style.display = 'none';
         
         // Clean up game objects
@@ -2403,13 +2503,13 @@ class SkyWarriorGame {
             const completed = completedMissions.includes(index + 1);
             
             html += `<button class="menu-button ${!available ? 'disabled' : ''}" 
-                     ${available ? `onclick="game.startMission(${mission.id})"` : 'disabled'}>
+                     ${available ? `onclick="game.playSFX('game-start-click'); game.startMission(${mission.id})"` : 'disabled'}>
                      ${mission.name} ${completed ? '✓' : ''}
                      ${!available ? ' (LOCKED)' : ''}
                      </button>`;
         });
         
-        html += '<button class="menu-button" onclick="game.hideMissionSelect()">Back</button>';
+        html += '<button class="menu-button" onclick="game.playSFX(\'game-start-click\'); game.hideMissionSelect()" onmouseover="game.playSFX(\'menu-hover\')">Back</button>';
         
         const menu = document.createElement('div');
         menu.id = 'missionSelectMenu';
