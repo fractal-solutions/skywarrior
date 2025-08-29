@@ -170,7 +170,8 @@ class SkyWarriorGame {
     setupScene() {
         // Scene
         this.scene = new THREE.Scene();
-        this.scene.fog = new THREE.Fog(0x220033, 1000, 5000);
+        // Refined fog for atmospheric effect - Darker, less dense, better horizon blend
+        this.scene.fog = new THREE.Fog(0x1a1a2a, 1000, 4000); // Dark blue/grey, less dense, longer range
         
         // Camera
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
@@ -185,11 +186,11 @@ class SkyWarriorGame {
         
         document.getElementById('scene-container').appendChild(this.renderer.domElement);
         
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        // Lighting - Enhanced with alien colors
+        const ambientLight = new THREE.AmbientLight(0x2a2a3a, 0.4); // Dark blue/grey ambient light, slightly less intense
         this.scene.add(ambientLight);
         
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        const directionalLight = new THREE.DirectionalLight(0xcccccc, 0.7); // Neutral, slightly cool white directional light
         directionalLight.position.set(1000, 1000, 500);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 2048;
@@ -675,6 +676,140 @@ class SkyWarriorGame {
             this.scene.add(buildingGroup);
             this.buildings.push(buildingGroup); // Add building to the array
         }
+
+        // Add ground details (rocks, crystals, alien flora) - More realistic
+        for (let i = 0; i < 20; i++) { // Increased number of details
+            const detailType = Math.random();
+            let detailMesh;
+            let detailHeight = 0;
+
+            const x = (Math.random() - 0.5) * 9000;
+            const z = (Math.random() - 0.5) * 9000;
+
+            // Get terrain height at this position (approximate)
+            // This is a simplified way to get terrain height, a more accurate way would involve raycasting or sampling the heightmap
+            const terrainY = -100 + (Math.random() * 50 - 25); // Base terrain Y + random variation
+
+            if (detailType < 0.4) { // Small rocks - more irregular shapes
+                const rockGeometry = new THREE.DodecahedronGeometry(5 + Math.random() * 10);
+                const rockMaterial = new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(0, 0, 0.1 + Math.random() * 0.15) });
+                detailMesh = new THREE.Mesh(rockGeometry, rockMaterial);
+                detailHeight = detailMesh.geometry.parameters.radius;
+                detailMesh.scale.set(1 + Math.random() * 0.5, 1 + Math.random() * 0.5, 1 + Math.random() * 0.5); // Vary scale
+            } else if (detailType < 0.7) { // Crystals - more jagged and varied glow
+                const crystalGroup = new THREE.Group();
+                const numSpikes = 3 + Math.floor(Math.random() * 4);
+                for (let j = 0; j < numSpikes; j++) {
+                    const spikeGeometry = new THREE.ConeGeometry(2 + Math.random() * 5, 10 + Math.random() * 20, 4);
+                    const crystalMaterial = new THREE.MeshLambertMaterial({
+                        color: new THREE.Color().setHSL(0.6 + Math.random() * 0.2, 0.8, 0.5 + Math.random() * 0.3),
+                        emissive: new THREE.Color().setHSL(0.6 + Math.random() * 0.2, 0.8, 0.5 + Math.random() * 0.3),
+                        emissiveIntensity: 0.4 + Math.random() * 0.6
+                    });
+                    const spike = new THREE.Mesh(spikeGeometry, crystalMaterial);
+                    spike.position.y = spike.geometry.parameters.height / 2;
+                    spike.rotation.set(Math.random() * 0.5, Math.random() * Math.PI, Math.random() * 0.5);
+                    crystalGroup.add(spike);
+                }
+                detailMesh = crystalGroup;
+                detailHeight = 20; // Approximate height for placement
+            } else { // Alien flora - more organic, multi-part glowing
+                const floraGroup = new THREE.Group();
+                const baseGeometry = new THREE.SphereGeometry(5 + Math.random() * 8, 8, 8);
+                const baseMaterial = new THREE.MeshBasicMaterial({
+                    color: new THREE.Color().setHSL(0.2 + Math.random() * 0.2, 1, 0.5 + Math.random() * 0.3),
+                    emissive: new THREE.Color().setHSL(0.2 + Math.random() * 0.2, 1, 0.5 + Math.random() * 0.3),
+                    emissiveIntensity: 0.6 + Math.random() * 0.4
+                });
+                const base = new THREE.Mesh(baseGeometry, baseMaterial);
+                floraGroup.add(base);
+
+                const numBlobs = 2 + Math.floor(Math.random() * 3);
+                for (let j = 0; j < numBlobs; j++) {
+                    const blobGeometry = new THREE.SphereGeometry(2 + Math.random() * 4, 6, 6);
+                    const blob = new THREE.Mesh(blobGeometry, baseMaterial);
+                    blob.position.set((Math.random() - 0.5) * 10, 5 + Math.random() * 10, (Math.random() - 0.5) * 10);
+                    floraGroup.add(blob);
+                }
+                detailMesh = floraGroup;
+                detailHeight = 15; // Approximate height for placement
+            }
+
+            detailMesh.position.set(x, terrainY + detailHeight, z);
+            detailMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+            this.scene.add(detailMesh);
+        }
+
+        // Add energy pylons
+        for (let i = 0; i < 30; i++) { // A moderate number of pylons
+            const pylonGroup = new THREE.Group();
+
+            const pylonHeight = 100 + Math.random() * 150;
+            const pylonRadius = 5 + Math.random() * 10;
+
+            // Base
+            const baseGeometry = new THREE.CylinderGeometry(pylonRadius * 1.5, pylonRadius * 1.5, 10, 8);
+            const baseMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = 5;
+            pylonGroup.add(base);
+
+            // Main column
+            const columnGeometry = new THREE.CylinderGeometry(pylonRadius, pylonRadius, pylonHeight, 8);
+            const columnMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            const column = new THREE.Mesh(columnGeometry, columnMaterial);
+            column.position.y = pylonHeight / 2 + 10;
+            pylonGroup.add(column);
+
+            // Top glowing sphere
+            const sphereGeometry = new THREE.SphereGeometry(pylonRadius * 1.2, 16, 16);
+            const sphereMaterial = new THREE.MeshBasicMaterial({
+                color: 0x00ffff, // Cyan glow
+                emissive: 0x00ffff,
+                emissiveIntensity: 1.5 + Math.random() * 1.0
+            });
+            const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+            sphere.position.y = pylonHeight + 10;
+            pylonGroup.add(sphere);
+
+            // Add some connecting arms
+            for (let j = 0; j < 3; j++) {
+                const armGeometry = new THREE.BoxGeometry(pylonRadius * 0.5, 5, pylonRadius * 4);
+                const armMaterial = new THREE.MeshLambertMaterial({ color: 0x555555 });
+                const arm = new THREE.Mesh(armGeometry, armMaterial);
+                arm.position.set(0, pylonHeight * 0.7 + (j * 10), 0);
+                arm.rotation.y = Math.random() * Math.PI * 2;
+                pylonGroup.add(arm);
+            }
+
+            const x = (Math.random() - 0.5) * 8000;
+            const z = (Math.random() - 0.5) * 8000;
+            const terrainY = -100 + (Math.random() * 50 - 25); // Base terrain Y + random variation
+
+            pylonGroup.position.set(x, terrainY, z);
+            this.scene.add(pylonGroup);
+        }
+
+        // Add glowing spire plants
+        for (let i = 0; i < 10; i++) { // Just a few prominent ones
+            const spireHeight = 80 + Math.random() * 120;
+            const spireRadius = 5 + Math.random() * 10;
+
+            const spireGeometry = new THREE.CylinderGeometry(spireRadius * 0.5, spireRadius, spireHeight, 6);
+            const spireMaterial = new THREE.MeshBasicMaterial({
+                color: 0xff00ff, // Magenta glow
+                emissive: 0xff00ff,
+                emissiveIntensity: 1.0 + Math.random() * 0.5
+            });
+            const spire = new THREE.Mesh(spireGeometry, spireMaterial);
+
+            const x = (Math.random() - 0.5) * 8000;
+            const z = (Math.random() - 0.5) * 8000;
+            const terrainY = -100 + (Math.random() * 50 - 25); // Base terrain Y + random variation
+
+            spire.position.set(x, terrainY + spireHeight / 2, z);
+            this.scene.add(spire);
+        }
     }
     
     createSkybox() {
@@ -1068,13 +1203,13 @@ class SkyWarriorGame {
 
             if (playerBox.intersectsBox(buildingBox)) {
                 // Collision detected!
-                this.health -= 20; // Reduce player health
-                this.createExplosion(this.playerJet.position, 1); // Small explosion on impact
+                this.health -= 15; // Slightly reduced player health
+                this.createExplosion(this.playerJet.position, 0.8); // Smaller explosion on impact
 
                 // Simple collision response: push player away from the building
                 const collisionNormal = new THREE.Vector3().subVectors(this.playerJet.position, building.position).normalize();
-                this.playerJet.position.add(collisionNormal.multiplyScalar(50)); // Push away
-                this.velocity.multiplyScalar(0.5); // Reduce player speed on impact
+                this.playerJet.position.add(collisionNormal.multiplyScalar(20)); // Reduced push away
+                this.velocity.multiplyScalar(0.8); // Less reduction in player speed on impact
 
                 if (this.health <= 0) {
                     this.endMission(false); // End mission if health drops to 0
@@ -1356,18 +1491,18 @@ class SkyWarriorGame {
 
             if (playerBox.intersectsBox(enemyBox)) {
                 // Collision detected!
-                this.health -= 30; // Player takes significant damage
-                enemy.userData.health -= 50; // Enemy takes significant damage
+                this.health -= 20; // Player takes moderate damage
+                enemy.userData.health -= 30; // Enemy takes moderate damage
 
-                this.createExplosion(this.playerJet.position, 1.5); // Explosion at collision point
+                this.createExplosion(this.playerJet.position, 1.0); // Smaller explosion at collision point
 
                 // Simple collision response: push both away from each other
                 const collisionNormal = new THREE.Vector3().subVectors(this.playerJet.position, enemy.position).normalize();
-                this.playerJet.position.add(collisionNormal.clone().multiplyScalar(30));
-                enemy.position.sub(collisionNormal.clone().multiplyScalar(30));
+                this.playerJet.position.add(collisionNormal.clone().multiplyScalar(15)); // Reduced push away
+                enemy.position.sub(collisionNormal.clone().multiplyScalar(15)); // Reduced push away
 
-                this.velocity.multiplyScalar(0.2); // Reduce player speed
-                enemy.userData.velocity.multiplyScalar(0.2); // Reduce enemy speed
+                this.velocity.multiplyScalar(0.1); // Less reduction in player speed
+                enemy.userData.velocity.multiplyScalar(0.1); // Less reduction in enemy speed
 
                 if (this.health <= 0) {
                     this.endMission(false);
