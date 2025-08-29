@@ -11,10 +11,10 @@ Follow these steps to get the game up and running on your local machine.
 First, you need to download the game's source code. You can do this by cloning the repository using Git:
 
 ```bash
-git clone https://github.com/your-username/skywarrior.git
+git clone https://github.com/fractal-solutions/skywarrior.git
 cd skywarrior
 ```
-*(Note: Replace `https://github.com/your-username/skywarrior.git` with the actual repository URL if it's hosted elsewhere.)*
+*(Note: Replace `https://github.com/fractal-solutions/skywarrior.git` with the actual repository URL if it's hosted elsewhere.)*
 
 ### 2. Run the Game Executable
 
