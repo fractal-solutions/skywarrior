@@ -1434,6 +1434,22 @@ class SkyWarriorGame {
         ctx.beginPath();
         ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
         ctx.fill();
+
+        // Draw player orientation
+        const playerForwardWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(this.playerJet.quaternion);
+        // Project to XZ plane (radar's XY)
+        const playerForwardRadarX = playerForwardWorld.x;
+        const playerForwardRadarY = playerForwardWorld.z; // Assuming radar Y is world Z
+        const playerForwardAngle = Math.atan2(playerForwardRadarY, playerForwardRadarX);
+
+        const orientationLineLength = 8;
+        ctx.strokeStyle = '#00ff00';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.lineTo(centerX + Math.cos(playerForwardAngle) * orientationLineLength,
+                   centerY + Math.sin(playerForwardAngle) * orientationLineLength);
+        ctx.stroke();
         
         // Draw enemies
         if (this.playerJet) {
@@ -1453,6 +1469,36 @@ class SkyWarriorGame {
                     ctx.beginPath();
                     ctx.arc(x, y, 2, 0, Math.PI * 2);
                     ctx.fill();
+
+                    // Draw enemy orientation
+                    const enemyForwardWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(enemy.quaternion);
+                    // Project to XZ plane (radar's XY)
+                    const enemyForwardRadarX = enemyForwardWorld.x;
+                    const enemyForwardRadarY = enemyForwardWorld.z; // Assuming radar Y is world Z
+
+                    // Calculate angle relative to the enemy's position on the radar
+                    // This needs to be relative to the player's forward, not absolute world forward
+                    // The radar is player-centric, so enemy orientation should be relative to player's current heading
+                    
+                    // To get enemy's orientation relative to player's forward on radar:
+                    // 1. Get enemy's world forward vector.
+                    // 2. Get player's world forward vector.
+                    // 3. Rotate enemy's forward vector by inverse of player's quaternion (to get it into player's local space)
+                    // 4. Project that local vector onto XZ plane.
+
+                    const playerQuaternionInverse = this.playerJet.quaternion.clone().invert();
+                    const enemyForwardRelative = enemyForwardWorld.clone().applyQuaternion(playerQuaternionInverse);
+
+                    const enemyOrientationAngle = Math.atan2(enemyForwardRelative.z, enemyForwardRelative.x);
+
+                    const enemyOrientationLineLength = 5; // Shorter line for enemies
+                    ctx.strokeStyle = enemy === this.targetedEnemy ? '#ffff00' : '#ff0000';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x + Math.cos(enemyOrientationAngle) * enemyOrientationLineLength,
+                               y + Math.sin(enemyOrientationAngle) * enemyOrientationLineLength);
+                    ctx.stroke();
                 }
             });
         }
