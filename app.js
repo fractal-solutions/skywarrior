@@ -36,6 +36,7 @@ class SkyWarriorGame {
         this.velocity = new THREE.Vector3(0, 0, 0);
         this.throttle = 0.5;
         this.maxSpeed = 400; // Increased max speed
+        this.STALL_SPEED_KTS = 10; // Stall speed in knots
         this.acceleration = 80; // Increased acceleration
         this.turnRate = 3.5; // Increased turn rate
         this.pitchRate = 2.5; // Increased pitch rate
@@ -49,6 +50,7 @@ class SkyWarriorGame {
 
         // Afterburner
         this.afterburnerOn = false;
+        this.isStalled = false;
         this.afterburnerFuel = 100;
         this.maxAfterburnerFuel = 100;
         this.boostSpeed = 600;
@@ -1164,7 +1166,19 @@ class SkyWarriorGame {
     
     updatePlayerPhysics(deltaTime) {
         if (!this.playerJet) return;
-        
+
+        const currentSpeed = this.velocity.length();
+
+        // Stall logic
+        if (currentSpeed < this.STALL_SPEED_KTS && !this.isStalled) {
+            this.isStalled = true;
+            this.throttle = 0.1; // Minimal throttle during stall
+            console.log("STALL!");
+        } else if (currentSpeed >= this.STALL_SPEED_KTS + 5 && this.isStalled) { // +5 for a small buffer to recover
+            this.isStalled = false;
+            console.log("Stall recovered.");
+        }
+
         // Throttle control
         if (this.keys['KeyW']) {
             this.throttle = Math.min(1.0, this.throttle + deltaTime * 1.5);
@@ -1174,10 +1188,7 @@ class SkyWarriorGame {
         }
 
         // Afterburner control
-        if (this.keys['ShiftLeft']) {
-            console.log('Shift key pressed. Throttle:', this.throttle, 'Fuel:', this.afterburnerFuel);
-        }
-        this.afterburnerOn = this.keys['ShiftLeft'] && this.throttle > 0.5 && this.afterburnerFuel > 0;
+        this.afterburnerOn = this.keys['ShiftLeft'] && this.throttle > 0.5 && this.afterburnerFuel > 0 && !this.isStalled;
 
         if (this.afterburnerOn) {
             this.afterburnerFuel = Math.max(0, this.afterburnerFuel - 20 * deltaTime);
@@ -1214,7 +1225,24 @@ class SkyWarriorGame {
         forward.applyQuaternion(this.playerJet.quaternion);
 
         // Calculate the target velocity based on the ship's orientation and throttle
-        const targetVelocity = forward.clone().multiplyScalar(this.throttle * this.maxSpeed);
+        let targetVelocity = forward.clone().multiplyScalar(this.throttle * this.maxSpeed);
+
+        // Apply stall effects
+        if (this.isStalled) {
+            // Reduce forward velocity significantly
+            targetVelocity.multiplyScalar(0.1); 
+            // Apply downward force (gravity)
+            this.velocity.y -= 9.8 * 5 * deltaTime; // Increased gravity effect
+            // Limit control input effectiveness
+            this.pitchRate = 0.5; // Reduced pitch rate
+            this.turnRate = 0.5; // Reduced turn rate
+            this.rollRate = 0.5; // Reduced roll rate
+        } else {
+            // Restore normal control rates
+            this.pitchRate = 2.5; 
+            this.turnRate = 3.5; 
+            this.rollRate = 4.5; 
+        }
 
         // Interpolate the current velocity towards the target velocity
         this.velocity.lerp(targetVelocity, 0.05);
@@ -1229,9 +1257,9 @@ class SkyWarriorGame {
         this.velocity.multiplyScalar(0.995);
         
         // Limit maximum speed
-        const targetSpeed = this.afterburnerOn ? this.boostSpeed : this.throttle * this.maxSpeed;
-        if (this.velocity.length() > targetSpeed) {
-            this.velocity.normalize().multiplyScalar(targetSpeed);
+        const maxAllowedSpeed = this.afterburnerOn ? this.boostSpeed : this.throttle * this.maxSpeed;
+        if (this.velocity.length() > maxAllowedSpeed) {
+            this.velocity.normalize().multiplyScalar(maxAllowedSpeed);
         }
         
         // Apply velocity to position
@@ -1922,7 +1950,7 @@ class SkyWarriorGame {
         const altitude = Math.max(0, this.playerJet.position.y);
         
         document.getElementById('altitudeValue').textContent = Math.round(altitude) + ' ft';
-        document.getElementById('speedValue').textContent = Math.round(speed) + ' kts';
+        document.getElementById('speedValue').textContent = this.isStalled ? 'STALL!' : Math.round(speed) + ' kts';
         document.getElementById('throttleValue').textContent = Math.round(this.throttle * 100) + '%';
         document.getElementById('gforceValue').textContent = this.gForce.toFixed(1) + 'g';
         
