@@ -10,6 +10,9 @@ class SkyWarriorGame {
         this.explosions = [];
         this.enemiesToDestroy = [];
         this.buildings = [];
+        this.missilePickups = [];
+        this.ammoPickups = [];
+        this.pickupSpawnTimer = 0;
         this.terrain = null;
         
         // Game state
@@ -848,6 +851,79 @@ class SkyWarriorGame {
         this.scene.add(particleSystem);
     }
     
+    createMissilePickupModel() {
+        const group = new THREE.Group();
+
+        // Missile body (simple cylinder)
+        const bodyGeometry = new THREE.CylinderGeometry(3, 3, 20, 8);
+        const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x0077ff }); // Blue
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        group.add(body);
+
+        // Fins
+        const finGeometry = new THREE.BoxGeometry(1, 10, 10);
+        const finMaterial = new THREE.MeshLambertMaterial({ color: 0x0055cc });
+        const fin1 = new THREE.Mesh(finGeometry, finMaterial);
+        fin1.position.z = 0;
+        fin1.position.y = -5;
+        group.add(fin1);
+
+        const fin2 = new THREE.Mesh(finGeometry, finMaterial);
+        fin2.rotation.y = Math.PI / 2;
+        fin2.position.x = 0;
+        fin2.position.y = -5;
+        group.add(fin2);
+
+        // Glowing tip
+        const tipGeometry = new THREE.ConeGeometry(3, 5, 8);
+        const tipMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff, emissive: 0xff00ff, emissiveIntensity: 1.0 }); // Magenta glow
+        const tip = new THREE.Mesh(tipGeometry, tipMaterial);
+        tip.position.y = 12.5;
+        group.add(tip);
+
+        group.rotation.x = Math.PI / 2; // Orient horizontally
+        return group;
+    }
+
+    createAmmoPickupModel() {
+        const group = new THREE.Group();
+
+        // Ammo box (simple box)
+        const boxGeometry = new THREE.BoxGeometry(15, 10, 10);
+        const boxMaterial = new THREE.MeshLambertMaterial({ color: 0x888888 }); // Grey
+        const box = new THREE.Mesh(boxGeometry, boxMaterial);
+        group.add(box);
+
+        // Glowing cross
+        const crossMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 1.0 }); // Yellow glow
+        const cross1 = new THREE.Mesh(new THREE.BoxGeometry(15, 3, 3), crossMaterial);
+        const cross2 = new THREE.Mesh(new THREE.BoxGeometry(3, 10, 3), crossMaterial);
+        group.add(cross1);
+        group.add(cross2);
+
+        return group;
+    }
+
+    spawnPickup(type) {
+        const x = (Math.random() - 0.5) * 8000;
+        const z = (Math.random() - 0.5) * 8000;
+        const y = 50 + Math.random() * 100; // Spawn slightly above ground
+
+        let pickupMesh;
+        if (type === 'missile') {
+            pickupMesh = this.createMissilePickupModel();
+            pickupMesh.userData.type = 'missile';
+            this.missilePickups.push(pickupMesh);
+        } else if (type === 'ammo') {
+            pickupMesh = this.createAmmoPickupModel();
+            pickupMesh.userData.type = 'ammo';
+            this.ammoPickups.push(pickupMesh);
+        }
+
+        pickupMesh.position.set(x, y, z);
+        this.scene.add(pickupMesh);
+    }
+
     createBullet(position, direction, isPlayer = true) {
         const bulletGeometry = new THREE.SphereGeometry(2, 8, 8); // Made larger and more detailed
         const bulletMaterial = new THREE.MeshBasicMaterial({ 
@@ -1510,6 +1586,38 @@ class SkyWarriorGame {
                 // Enemy health check will be handled by updateBullets/updateMissiles in the next frame
             }
         });
+    }
+
+    checkPickupCollisions() {
+        if (!this.playerJet) return;
+
+        const playerBox = new THREE.Box3().setFromObject(this.playerJet);
+
+        // Check missile pickups
+        for (let i = this.missilePickups.length - 1; i >= 0; i--) {
+            const pickup = this.missilePickups[i];
+            const pickupBox = new THREE.Box3().setFromObject(pickup);
+
+            if (playerBox.intersectsBox(pickupBox)) {
+                this.ammo.missiles = Math.min(this.maxMissiles, this.ammo.missiles + 3); // Add 3 missiles
+                this.scene.remove(pickup);
+                this.missilePickups.splice(i, 1);
+                this.updateHUD();
+            }
+        }
+
+        // Check ammo pickups
+        for (let i = this.ammoPickups.length - 1; i >= 0; i--) {
+            const pickup = this.ammoPickups[i];
+            const pickupBox = new THREE.Box3().setFromObject(pickup);
+
+            if (playerBox.intersectsBox(pickupBox)) {
+                this.ammo.cannon += 200; // Add 200 cannon ammo
+                this.scene.remove(pickup);
+                this.ammoPickups.splice(i, 1);
+                this.updateHUD();
+            }
+        }
     }
 
     updateBullets(deltaTime) {
@@ -2291,6 +2399,7 @@ class SkyWarriorGame {
             this.updateTargeting();
             this.checkPlayerBuildingCollision();
             this.checkPlayerEnemyCollision();
+            this.checkPickupCollisions(); // Check for pickup collisions
             
             this.enemies.forEach(enemy => {
                 this.updateEnemyAI(enemy, deltaTime, this.bullets, this.missiles);
@@ -2300,6 +2409,16 @@ class SkyWarriorGame {
             this.updateMissiles(deltaTime);
             this.updateExplosions(deltaTime);
             this.updateDestroyedEnemies(deltaTime);
+
+            // Pickup spawning logic
+            this.pickupSpawnTimer += deltaTime;
+            const spawnInterval = 15; // Spawn a pickup every 15 seconds
+            if (this.pickupSpawnTimer >= spawnInterval) {
+                const typeToSpawn = Math.random() < 0.5 ? 'missile' : 'ammo';
+                this.spawnPickup(typeToSpawn);
+                this.pickupSpawnTimer = 0; // Reset timer
+            }
+
             this.updateHUD();
             this.checkMissionComplete();
         }
