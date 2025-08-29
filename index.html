@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SKY WARRIOR - 3D Fighter Jet Combat</title>
+    <title>SKY WARRIOR - Surreal Space Rebellion</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         body {
@@ -370,6 +370,12 @@
             <div class="spinner"></div>
             <p style="color: #fff; margin-top: 20px;">Loading Fighter Jet Combat...</p>
         </div>
+
+        <!-- Start Screen Overlay -->
+        <div id="startScreen" class="ui-element" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <h1 style="color: #ff6600; font-size: 48px; margin-bottom: 30px;">SKY WARRIOR</h1>
+            <button id="startButton" class="menu-button">CLICK TO START</button>
+        </div>
         
         <!-- Three.js Scene Container -->
         <div id="scene-container"></div>
@@ -379,7 +385,7 @@
             <!-- Main Menu -->
             <div id="mainMenu" class="ui-element">
                 <h1>SKY WARRIOR</h1>
-                <p style="color: #ccc; margin-bottom: 30px;">Elite Fighter Jet Combat</p>
+                <p style="color: #ccc; margin-bottom: 30px;">Surreal Space Rebellion</p>
                 <button class="menu-button" onclick="game.playSFX('game-start-click'); game.startMission(1)" onmouseover="game.playSFX('menu-hover')">New Game</button>
                 <button class="menu-button" onclick="game.playSFX('game-start-click'); game.showMissionSelect()" onmouseover="game.playSFX('menu-hover')">Mission Select</button>
                 <button class="menu-button" onclick="game.playSFX('game-start-click'); game.showSettings()" onmouseover="game.playSFX('menu-hover')">Settings</button>

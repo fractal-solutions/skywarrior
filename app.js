@@ -171,9 +171,10 @@ class SkyWarriorGame {
         this.setupAudio(); // New: Setup audio
         this.loadSounds(); // New: Load sounds
         
-        // Hide loading screen after a short delay
+        // Hide loading screen after a short delay and show start screen
         setTimeout(() => {
             document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('startScreen').classList.remove('hidden');
         }, 2000);
         
         this.animate();
@@ -196,7 +197,11 @@ class SkyWarriorGame {
             { name: 'ingame-pickup', path: 'audio/ingame-pickup.wav' },
             { name: 'menu-hover', path: 'audio/menu-hover.wav' },
             { name: 'menu-music', path: 'audio/menu-music.wav' },
-            { name: 'missile-alert', path: 'audio/missile-alert.wav' }
+            { name: 'missile-alert', path: 'audio/missile-alert.wav' },
+            { name: 'missile-launch', path: 'audio/missile-launch.mp3' },
+            { name: 'cannon-fire', path: 'audio/cannon-fire.mp3' },
+            { name: 'player-engine', path: 'audio/player-engine.mp3' },
+            { name: 'player-afterburner', path: 'audio/player-afterburner.mp3' }
         ];
 
         let loadedCount = 0;
@@ -437,6 +442,23 @@ class SkyWarriorGame {
         
         // Initialize velocity
         this.velocity.set(0, 0, 0);
+
+        // Setup player engine and afterburner sounds
+        if (this.sounds['player-engine']) {
+            this.playerEngineSound = new THREE.Audio(this.audioListener);
+            this.playerEngineSound.setBuffer(this.sounds['player-engine']);
+            this.playerEngineSound.setLoop(true);
+            this.playerEngineSound.setVolume(0); // Start silent
+            this.playerJet.add(this.playerEngineSound);
+        }
+
+        if (this.sounds['player-afterburner']) {
+            this.playerAfterburnerSound = new THREE.Audio(this.audioListener);
+            this.playerAfterburnerSound.setBuffer(this.sounds['player-afterburner']);
+            this.playerAfterburnerSound.setLoop(true);
+            this.playerAfterburnerSound.setVolume(0); // Start silent
+            this.playerJet.add(this.playerAfterburnerSound);
+        }
     }
     
     createEnemy(position, enemyType = 'scout') { // Default to scout if type not provided
@@ -615,6 +637,19 @@ class SkyWarriorGame {
         
         this.scene.add(enemyGroup);
         this.enemies.push(enemyGroup);
+
+        // Add positional audio for enemy sound
+        if (this.sounds['enemy-sound']) {
+            const enemyAudio = new THREE.PositionalAudio(this.audioListener);
+            enemyAudio.setBuffer(this.sounds['enemy-sound']);
+            enemyAudio.setLoop(true);
+            enemyAudio.setVolume(0.5); // Base volume
+            enemyAudio.setRefDistance(100); // Distance where volume is 100%
+            enemyAudio.setRolloffFactor(1); // How quickly volume decreases with distance
+            enemyAudio.play();
+            enemyGroup.add(enemyAudio);
+            enemyGroup.userData.audio = enemyAudio; // Store reference to audio
+        }
         
         return enemyGroup;
     }
@@ -1133,6 +1168,7 @@ class SkyWarriorGame {
     
     firePrimaryWeapon() {
         if (this.selectedWeapon === 'cannon' && this.ammo.cannon > 0) {
+            this.playSFX('cannon-fire', 0.5); // Play cannon fire sound
             const direction = new THREE.Vector3(1, 0, 0);
             direction.applyQuaternion(this.playerJet.quaternion);
             
@@ -1149,6 +1185,7 @@ class SkyWarriorGame {
     
     fireMissile() {
         if (this.ammo.missiles > 0) {
+            this.playSFX('missile-launch', 0.7); // Play missile launch sound
             this.createHomingMissile(this.playerJet.position, this.targetedEnemy, this.playerJet); // Pass firing entity
             this.ammo.missiles--;
             this.updateHUD();
@@ -1280,6 +1317,17 @@ class SkyWarriorGame {
         // Afterburner visual effect
         const exhaustLeft = this.playerJet.getObjectByName('exhaust_left');
         const exhaustRight = this.playerJet.getObjectByName('exhaust_right');
+
+        // Update engine and afterburner sound volumes
+        if (this.playerEngineSound) {
+            // Map throttle (0-1) to a suitable volume range (e.g., 0.2 to 1.0)
+            const engineVolume = 0.2 + (this.throttle * 0.8);
+            this.playerEngineSound.setVolume(engineVolume * (this.settings.sfxVolume / 100));
+        }
+        if (this.playerAfterburnerSound) {
+            const afterburnerVolume = this.afterburnerOn ? 1.0 : 0.0;
+            this.playerAfterburnerSound.setVolume(afterburnerVolume * (this.settings.sfxVolume / 100));
+        }
 
         if (exhaustLeft && exhaustRight) {
             if (this.afterburnerOn) {
@@ -1838,7 +1886,6 @@ class SkyWarriorGame {
                                 this.targetedEnemy = null;
                             }
                         } else {
-                            this.playSFX('enemy-sound', 0.4); // Play enemy hit sound
                             this.createExplosion(bullet.position, 0.5);
                         }
                         
@@ -1933,7 +1980,6 @@ class SkyWarriorGame {
                             this.targetedEnemy = null;
                         }
                     } else {
-                        this.playSFX('enemy-sound', 0.6); // Play enemy hit sound (louder for missile)
                         this.createExplosion(missile.position, 1.5);
                     }
                     
@@ -2284,7 +2330,30 @@ class SkyWarriorGame {
 
         // Play game music
         this.stopMusic(); // Stop menu music
+
+        // Ensure audio context is resumed on user interaction
+        if (this.audioListener && this.audioListener.context.state === 'suspended') {
+            this.audioListener.context.resume().then(() => {
+                console.log("AudioContext resumed successfully in startMission.");
+            }).catch(e => console.error("Error resuming AudioContext:", e));
+        }
+
+        console.log("Attempting to play game music...");
         this.playMusic('game-music');
+
+        // Start player engine and afterburner sounds
+        console.log("Attempting to play engine and afterburner sounds...");
+        if (this.playerEngineSound) {
+            console.log("playerEngineSound exists:", this.playerEngineSound);
+            console.log("playerEngineSound buffer:", !!this.playerEngineSound.buffer);
+            this.playerEngineSound.play();
+        }
+        if (this.playerAfterburnerSound) {
+            console.log("playerAfterburnerSound exists:", this.playerAfterburnerSound);
+            console.log("playerAfterburnerSound buffer:", !!this.playerAfterburnerSound.buffer);
+            this.playerAfterburnerSound.play();
+        }
+        console.log("AudioContext state:", this.audioListener.context.state);
 
         // Create a new camera to ensure a clean state
         this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 10000);
@@ -2348,6 +2417,14 @@ class SkyWarriorGame {
         
         this.stopMusic(); // Stop game music
 
+        // Stop player engine and afterburner sounds
+        if (this.playerEngineSound) {
+            this.playerEngineSound.stop();
+        }
+        if (this.playerAfterburnerSound) {
+            this.playerAfterburnerSound.stop();
+        }
+
         if (!success) {
             this.playSFX('game-over'); // Play game over sound on failure
         }
@@ -2399,6 +2476,11 @@ class SkyWarriorGame {
         if (this.gameState === 'playing') {
             this.gameState = 'paused';
             document.getElementById('pauseMenu').classList.remove('hidden');
+            // Stop in-game sounds and play menu music
+            if (this.playerEngineSound) this.playerEngineSound.stop();
+            if (this.playerAfterburnerSound) this.playerAfterburnerSound.stop();
+            this.stopMusic(); // Stop game music
+            this.playMusic('menu-music'); // Play menu music
         }
     }
     
@@ -2406,6 +2488,11 @@ class SkyWarriorGame {
         if (this.gameState === 'paused') {
             this.gameState = 'playing';
             document.getElementById('pauseMenu').classList.add('hidden');
+            // Resume in-game sounds and play game music
+            if (this.playerEngineSound) this.playerEngineSound.play();
+            if (this.playerAfterburnerSound) this.playerAfterburnerSound.play();
+            this.stopMusic(); // Stop menu music
+            this.playMusic('game-music'); // Play game music
         }
     }
     
@@ -2423,6 +2510,13 @@ class SkyWarriorGame {
         // Clean up game objects
         if (this.playerJet) {
             this.scene.remove(this.playerJet);
+            // Stop player engine and afterburner sounds when returning to menu
+            if (this.playerEngineSound) {
+                this.playerEngineSound.stop();
+            }
+            if (this.playerAfterburnerSound) {
+                this.playerAfterburnerSound.stop();
+            }
             this.playerJet = null;
         }
         this.enemies.forEach(enemy => this.scene.remove(enemy));
@@ -2540,7 +2634,7 @@ class SkyWarriorGame {
     }
     
     hideAllMenus() {
-        const menus = ['mainMenu', 'settingsMenu', 'instructionsMenu', 'pauseMenu', 'missionResults', 'enemyIntelMenu']; // Added enemyIntelMenu
+        const menus = ['mainMenu', 'settingsMenu', 'instructionsMenu', 'pauseMenu', 'missionResults', 'enemyIntelMenu', 'startScreen']; // Added startScreen
         menus.forEach(id => {
             const element = document.getElementById(id);
             if (element) element.classList.add('hidden');
@@ -2606,6 +2700,21 @@ class SkyWarriorGame {
     
     setupUI() {
         // Any additional UI setup can go here
+        this.setupStartScreen();
+    }
+
+    setupStartScreen() {
+        const startButton = document.getElementById('startButton');
+        if (startButton) {
+            startButton.addEventListener('click', () => {
+                // Unlock audio context on user interaction
+                if (this.audioListener && this.audioListener.context.state === 'suspended') {
+                    this.audioListener.context.resume();
+                }
+                document.getElementById('startScreen').classList.add('hidden');
+                this.showMainMenu();
+            });
+        }
     }
     
     animate() {
@@ -2665,6 +2774,6 @@ document.addEventListener('DOMContentLoaded', () => {
         font-size: 12px;
         color: #666;
     `;
-    footer.innerHTML = '<a href="https://berrry.app" target="_blank" style="color: #ff6600; text-decoration: none;">Made with Berrry</a>';
+    footer.innerHTML = '<a href="https://fractal.co.ke" target="_blank" style="color: #ff6600; text-decoration: none;">Powered by Fractal</a>';
     document.body.appendChild(footer);
 });
