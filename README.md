@@ -16,6 +16,8 @@ cd skywarrior
 ```
 *(Note: Replace `https://github.com/fractal-solutions/skywarrior.git` with the actual repository URL if it's hosted elsewhere.)*
 
+You can also simply download this repo 👆🏾
+
 ### 2. Run the Game Executable
 
 The game requires a backend server to run. We provide pre-built executables for Windows and Linux.
