@@ -320,6 +320,36 @@ class SkyWarriorGame {
     
     setupControls() {
         document.addEventListener('keydown', (event) => {
+            // Always prevent default for F5 (reload)
+            if (event.code === 'F5') {
+                event.preventDefault();
+            }
+
+            // Prevent common browser shortcuts involving Ctrl, Shift, Alt, Meta
+            // but be careful not to block game-specific actions.
+            if (event.ctrlKey || event.altKey || event.metaKey) {
+                // Allow game's direct use of ControlLeft/Right as primary keys
+                if (event.code === 'ControlLeft' || event.code === 'ControlRight') {
+                    // Do nothing, let handleKeyPress handle missile firing
+                } else {
+                    // For other keys pressed with Ctrl/Alt/Meta, prevent default if it's a known browser shortcut
+                    switch (event.code) {
+                        case 'KeyS': // Ctrl/Cmd + S (Save page)
+                        case 'KeyP': // Ctrl/Cmd + P (Print)
+                        case 'KeyR': // Ctrl/Cmd + R (Reload)
+                        case 'KeyT': // Ctrl/Cmd + T (New tab)
+                        case 'KeyN': // Ctrl/Cmd + N (New window)
+                        case 'KeyW': // Ctrl/Cmd + W (Close tab)
+                            event.preventDefault();
+                            break;
+                    }
+                }
+            }
+            // Prevent Alt + ArrowLeft/Right for back/forward navigation
+            if (event.altKey && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) {
+                event.preventDefault();
+            }
+
             this.keys[event.code] = true;
             this.handleKeyPress(event);
         });
